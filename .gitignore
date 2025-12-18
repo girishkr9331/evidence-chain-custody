@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+blockchain/node_modules/
+
+# Production
+dist/
+build/
+
+# Environment Variables (NEVER COMMIT THESE!)
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+*.env
+!.env.example
+
+# Blockchain
+blockchain/artifacts/
+blockchain/cache/
+blockchain/typechain-types/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Contracts
+src/contracts/*.json
+
+# Temporary files
+tmp_rovodev_*
