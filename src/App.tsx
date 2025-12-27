@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'react-hot-toast'
 import { Web3Provider } from './context/Web3Context'
 import { AuthProvider } from './context/AuthContext'
+import { ThemeProvider } from './context/ThemeContext'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
@@ -18,11 +19,12 @@ import ProtectedRoute from './components/ProtectedRoute'
 function App() {
   return (
     <Router>
-      <Web3Provider>
-        <AuthProvider>
-          <div className="min-h-screen bg-gray-50">
-            <Toaster position="top-right" />
-            <Routes>
+      <ThemeProvider>
+        <Web3Provider>
+          <AuthProvider>
+            <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+              <Toaster position="top-right" />
+              <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               
@@ -81,10 +83,11 @@ function App() {
               } />
               
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            </Routes>
-          </div>
-        </AuthProvider>
-      </Web3Provider>
+              </Routes>
+            </div>
+          </AuthProvider>
+        </Web3Provider>
+      </ThemeProvider>
     </Router>
   )
 }

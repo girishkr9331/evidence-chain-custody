@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { AlertTriangle, CheckCircle, XCircle, Clock, Shield } from 'lucide-react'
 import Layout from '../components/Layout'
 import { useWeb3 } from '../context/Web3Context'
 import toast from 'react-hot-toast'
@@ -19,11 +19,50 @@ const Alerts = () => {
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [filter, setFilter] = useState<'ALL' | 'RESOLVED' | 'UNRESOLVED'>('ALL')
   const [loading, setLoading] = useState(true)
-  const { contract, isConnected } = useWeb3()
+  const [canResolveAlerts, setCanResolveAlerts] = useState(false)
+  const { contract, isConnected, account } = useWeb3()
 
   useEffect(() => {
     loadAlerts()
-  }, [contract, isConnected])
+    checkResolvePermission()
+  }, [contract, isConnected, account])
+
+  const checkResolvePermission = async () => {
+    if (!contract || !isConnected || !account) {
+      setCanResolveAlerts(false)
+      return
+    }
+
+    try {
+      // Check if user is admin
+      const contractAdmin = await contract.admin()
+      const isAdmin = account.toLowerCase() === contractAdmin.toLowerCase()
+      
+      if (isAdmin) {
+        console.log('✅ You are the admin - can resolve alerts')
+        setCanResolveAlerts(true)
+        return
+      }
+
+      // Check if user is an investigator (Role.INVESTIGATOR = 2)
+      const user = await contract.getUser(account)
+      const userRole = Number(user.role)
+      const isInvestigator = userRole === 2 && user.isActive
+      
+      console.log('👮 Alert resolution permission check:', {
+        address: account,
+        role: userRole,
+        isAdmin: isAdmin,
+        isInvestigator: isInvestigator,
+        canResolve: isAdmin || isInvestigator
+      })
+      
+      setCanResolveAlerts(isInvestigator)
+    } catch (error) {
+      console.error('Error checking resolve permission:', error)
+      setCanResolveAlerts(false)
+    }
+  }
 
   const loadAlerts = async () => {
     if (!contract || !isConnected) {
@@ -140,8 +179,8 @@ const Alerts = () => {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Security Alerts</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Security Alerts</h1>
+          <p className="text-gray-600 dark:text-gray-300 mt-1">
             Monitor unauthorized access attempts and security events
           </p>
         </div>
@@ -151,31 +190,31 @@ const Alerts = () => {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Alerts</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1">{stats.total}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Total Alerts</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">{stats.total}</p>
               </div>
               <AlertTriangle className="w-10 h-10 text-blue-500" />
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Unresolved</p>
-                <p className="text-3xl font-bold text-red-600 mt-1">{stats.unresolved}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Unresolved</p>
+                <p className="text-3xl font-bold text-red-600 dark:text-red-400 mt-1">{stats.unresolved}</p>
               </div>
               <XCircle className="w-10 h-10 text-red-500" />
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Resolved</p>
-                <p className="text-3xl font-bold text-green-600 mt-1">{stats.resolved}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Resolved</p>
+                <p className="text-3xl font-bold text-green-600 dark:text-green-400 mt-1">{stats.resolved}</p>
               </div>
               <CheckCircle className="w-10 h-10 text-green-500" />
             </div>
@@ -183,9 +222,9 @@ const Alerts = () => {
         </div>
 
         {/* Filter */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
           <div className="flex items-center gap-4">
-            <span className="text-sm font-medium text-gray-700">Filter:</span>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Filter:</span>
             <div className="flex gap-2">
               {(['ALL', 'UNRESOLVED', 'RESOLVED'] as const).map((f) => (
                 <button
@@ -194,7 +233,7 @@ const Alerts = () => {
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     filter === f
                       ? 'bg-primary-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                   }`}
                 >
                   {f}
@@ -206,12 +245,12 @@ const Alerts = () => {
 
         {/* Alerts List */}
         {!isConnected ? (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-            <AlertTriangle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
+            <AlertTriangle className="w-16 h-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
               Wallet Not Connected
             </h3>
-            <p className="text-gray-600">
+            <p className="text-gray-600 dark:text-gray-400">
               Please connect your wallet to view security alerts
             </p>
           </div>
@@ -221,7 +260,7 @@ const Alerts = () => {
               <div
                 key={alert.id}
                 className={`rounded-xl border p-6 ${
-                  alert.resolved ? 'bg-gray-50 border-gray-200' : getAlertColor(alert.alertType)
+                  alert.resolved ? 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600' : getAlertColor(alert.alertType)
                 }`}
               >
                 <div className="flex items-start justify-between">
@@ -229,19 +268,19 @@ const Alerts = () => {
                     {getAlertIcon(alert.alertType, alert.resolved)}
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-semibold">
+                        <h3 className={`text-lg font-semibold ${alert.resolved ? 'text-gray-900 dark:text-white' : ''}`}>
                           {alert.alertType.replace(/_/g, ' ')}
                         </h3>
                         {alert.resolved && (
-                          <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">
+                          <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded">
                             RESOLVED
                           </span>
                         )}
                       </div>
                       
-                      <p className="text-sm mb-3">{alert.message}</p>
+                      <p className={`text-sm mb-3 ${alert.resolved ? 'text-gray-600 dark:text-gray-400' : ''}`}>{alert.message}</p>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                      <div className={`grid grid-cols-1 md:grid-cols-3 gap-3 text-sm ${alert.resolved ? 'text-gray-600 dark:text-gray-400' : ''}`}>
                         <div>
                           <span className="font-medium">Evidence ID:</span>{' '}
                           <span className="font-mono">{alert.evidenceId}</span>
@@ -261,24 +300,45 @@ const Alerts = () => {
                   </div>
 
                   {!alert.resolved && (
-                    <button
-                      onClick={() => handleResolveAlert(alert.id)}
-                      className="ml-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                    >
-                      Resolve
-                    </button>
+                    <div className="relative group ml-4">
+                      <button
+                        onClick={() => canResolveAlerts && handleResolveAlert(alert.id)}
+                        disabled={!canResolveAlerts}
+                        className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
+                          canResolveAlerts
+                            ? 'bg-green-600 text-white hover:bg-green-700'
+                            : 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        Resolve
+                      </button>
+                      {!canResolveAlerts && (
+                        <div className="absolute top-full right-0 mt-2 hidden group-hover:block w-72 z-50">
+                          <div className="bg-gray-900 dark:bg-gray-700 text-white text-sm rounded-lg px-3 py-2 shadow-lg">
+                            <p className="font-semibold mb-1 flex items-center gap-1">
+                              <Shield className="w-4 h-4" />
+                              Admin/Investigator Access Required
+                            </p>
+                            <p>Only administrators and investigators can resolve security alerts. Contact your system admin for assistance.</p>
+                            <div className="absolute bottom-full right-4 -mb-1">
+                              <div className="border-8 border-transparent border-b-gray-900 dark:border-b-gray-700"></div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
             <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
               {filter === 'ALL' ? 'No alerts' : `No ${filter.toLowerCase()} alerts`}
             </h3>
-            <p className="text-gray-600">
+            <p className="text-gray-600 dark:text-gray-400">
               {filter === 'ALL'
                 ? 'Your system is secure with no security alerts'
                 : `There are no ${filter.toLowerCase()} alerts at this time`}
@@ -287,9 +347,9 @@ const Alerts = () => {
         )}
 
         {/* Info Box */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-blue-900 mb-2">Alert Types:</h3>
-          <ul className="text-sm text-blue-800 space-y-1">
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">Alert Types:</h3>
+          <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
             <li>• <strong>UNAUTHORIZED_ACCESS:</strong> Someone attempted to access evidence without permission</li>
             <li>• <strong>TAMPERING_DETECTED:</strong> Evidence integrity verification failed</li>
             <li>• <strong>SUSPICIOUS_ACTIVITY:</strong> Unusual patterns detected in evidence handling</li>

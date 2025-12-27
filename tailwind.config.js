@@ -4,6 +4,7 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
@@ -18,6 +19,16 @@ export default {
           700: '#0369a1',
           800: '#075985',
           900: '#0c4a6e',
+        },
+      },
+      animation: {
+        'theme-switch': 'theme-switch 0.3s ease-in-out',
+      },
+      keyframes: {
+        'theme-switch': {
+          '0%': { transform: 'scale(0.8)', opacity: '0.8' },
+          '50%': { transform: 'scale(1.1)' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
         },
       },
     },

@@ -249,7 +249,7 @@ const EvidenceDetails = () => {
     return (
       <Layout>
         <div className="text-center py-12">
-          <p className="text-gray-600">Evidence not found</p>
+          <p className="text-gray-600 dark:text-gray-400">Evidence not found</p>
           <Link to="/evidence/list" className="text-primary-600 hover:text-primary-700 mt-4 inline-block">
             Back to Evidence List
           </Link>
@@ -265,95 +265,95 @@ const EvidenceDetails = () => {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate(-1)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-5 h-5 text-gray-900 dark:text-white" />
           </button>
           <div className="flex-1">
-            <h1 className="text-3xl font-bold text-gray-900">{evidence.evidenceId}</h1>
-            <p className="text-gray-600 mt-1">Case: {evidence.caseId}</p>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{evidence.evidenceId}</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">Case: {evidence.caseId}</p>
           </div>
-          <span className="px-4 py-2 bg-green-100 text-green-700 font-medium rounded-lg">
+          <span className="px-4 py-2 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-medium rounded-lg">
             Active
           </span>
         </div>
 
         {/* Evidence Details Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Evidence Information</h2>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Evidence Information</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="text-sm font-medium text-gray-500">Evidence ID</label>
-              <p className="text-gray-900 mt-1">{evidence.evidenceId}</p>
+              <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Evidence ID</label>
+              <p className="text-gray-900 dark:text-white mt-1">{evidence.evidenceId}</p>
             </div>
             
             <div>
-              <label className="text-sm font-medium text-gray-500">Case ID</label>
-              <p className="text-gray-900 mt-1">{evidence.caseId}</p>
+              <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Case ID</label>
+              <p className="text-gray-900 dark:text-white mt-1">{evidence.caseId}</p>
             </div>
             
             <div>
-              <label className="text-sm font-medium text-gray-500">Category</label>
-              <p className="text-gray-900 mt-1">{evidence.metadata.category || 'N/A'}</p>
+              <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Category</label>
+              <p className="text-gray-900 dark:text-white mt-1">{evidence.metadata.category || 'N/A'}</p>
             </div>
             
             <div>
-              <label className="text-sm font-medium text-gray-500">Collected Date</label>
-              <p className="text-gray-900 mt-1">
+              <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Collected Date</label>
+              <p className="text-gray-900 dark:text-white mt-1">
                 {new Date(evidence.createdAt * 1000).toLocaleString()}
               </p>
             </div>
             
             <div className="md:col-span-2">
-              <label className="text-sm font-medium text-gray-500">Description</label>
-              <p className="text-gray-900 mt-1">{evidence.metadata.description || 'N/A'}</p>
+              <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Description</label>
+              <p className="text-gray-900 dark:text-white mt-1">{evidence.metadata.description || 'N/A'}</p>
             </div>
           </div>
         </div>
 
         {/* Custody Information */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Chain of Custody</h2>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Chain of Custody</h2>
           
           <div className="space-y-4">
-            <div className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg">
-              <User className="w-5 h-5 text-blue-600 mt-0.5" />
+            <div className="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <User className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">Collector</p>
-                <p className="text-sm text-gray-900 font-mono">{evidence.collector}</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Collector</p>
+                <p className="text-sm text-gray-900 dark:text-white font-mono">{evidence.collector}</p>
               </div>
             </div>
             
-            <div className="flex items-start gap-3 p-4 bg-green-50 rounded-lg">
-              <Shield className="w-5 h-5 text-green-600 mt-0.5" />
+            <div className="flex items-start gap-3 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <Shield className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">Current Custodian</p>
-                <p className="text-sm text-gray-900 font-mono">{evidence.currentCustodian}</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Current Custodian</p>
+                <p className="text-sm text-gray-900 dark:text-white font-mono">{evidence.currentCustodian}</p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Hash Verification */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
             <Hash className="w-5 h-5" />
             Cryptographic Hash
           </h2>
           
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <p className="text-xs font-mono text-gray-700 break-all">{evidence.evidenceHash}</p>
+          <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+            <p className="text-xs font-mono text-gray-700 dark:text-gray-300 break-all">{evidence.evidenceHash}</p>
           </div>
           
-          <p className="text-xs text-gray-600 mt-2">
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
             This SHA-256 hash is stored immutably on the blockchain and can be used to verify evidence integrity.
           </p>
         </div>
 
         {/* Actions */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Actions</h2>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Actions</h2>
           
           <div className="flex flex-wrap gap-3">
             <button
@@ -376,15 +376,15 @@ const EvidenceDetails = () => {
             
             <Link
               to={`/audit-trail?evidence=${id}`}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               View Full Audit Trail
             </Link>
           </div>
           
           {showTransfer && (
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+            <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Transfer to Address
               </label>
               <div className="flex gap-2">
@@ -393,7 +393,7 @@ const EvidenceDetails = () => {
                   value={transferTo}
                   onChange={(e) => setTransferTo(e.target.value)}
                   placeholder="0x..."
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg"
                 />
                 <button
                   onClick={handleTransfer}
@@ -407,9 +407,9 @@ const EvidenceDetails = () => {
         </div>
 
         {/* Recent Audit Trail */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">Activity Timeline</h2>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Activity Timeline</h2>
             <Link
               to={`/audit-trail?evidence=${id}`}
               className="text-sm text-primary-600 hover:text-primary-700"
@@ -422,8 +422,8 @@ const EvidenceDetails = () => {
             <AuditTimeline logs={auditTrail} maxItems={5} />
           ) : (
             <div className="text-center py-8">
-              <p className="text-gray-500 mb-2">No audit logs found</p>
-              <p className="text-sm text-gray-400">
+              <p className="text-gray-500 dark:text-gray-400 mb-2">No audit logs found</p>
+              <p className="text-sm text-gray-400 dark:text-gray-500">
                 {!isConnected 
                   ? 'Connect your wallet to view blockchain audit logs' 
                   : 'Audit logs will appear when you interact with this evidence on the blockchain'}

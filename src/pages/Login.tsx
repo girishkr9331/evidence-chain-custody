@@ -1,34 +1,34 @@
-import { useState, FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Shield, Wallet } from 'lucide-react'
-import { useAuth } from '../context/AuthContext'
-import { useWeb3 } from '../context/Web3Context'
+import { useState, FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Shield, Wallet } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { useWeb3 } from "../context/Web3Context";
 
 const Login = () => {
-  const [address, setAddress] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const { login } = useAuth()
-  const { connectWallet, account } = useWeb3()
-  const navigate = useNavigate()
+  const [address, setAddress] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const { connectWallet, account } = useWeb3();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
+    e.preventDefault();
+    setLoading(true);
 
     try {
-      await login(address || account || '', password)
-      navigate('/dashboard')
+      await login(address || account || "", password);
+      navigate("/dashboard");
     } catch (error) {
-      console.error('Login error:', error)
+      console.error("Login error:", error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleConnectWallet = async () => {
-    await connectWallet()
-  }
+    await connectWallet();
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-primary-100 px-4">
@@ -74,12 +74,13 @@ const Login = () => {
                   disabled={!!account}
                 >
                   <Wallet className="w-5 h-5" />
-                  {account ? 'Connected' : 'Connect'}
+                  {account ? "Connected" : "Connect"}
                 </button>
               </div>
               {account && (
                 <p className="mt-2 text-xs text-green-600">
-                  ✓ Wallet connected: {account.slice(0, 6)}...{account.slice(-4)}
+                  ✓ Wallet connected: {account.slice(0, 6)}...
+                  {account.slice(-4)}
                 </p>
               )}
             </div>
@@ -105,15 +106,18 @@ const Login = () => {
               disabled={loading || (!address && !account)}
               className="w-full py-3 px-4 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Signing In...' : 'Sign In'}
+              {loading ? "Signing In..." : "Sign In"}
             </button>
           </form>
 
           {/* Register Link */}
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
-              <Link to="/register" className="text-primary-600 hover:text-primary-700 font-medium">
+              Don't have an account?{" "}
+              <Link
+                to="/register"
+                className="text-primary-600 hover:text-primary-700 font-medium"
+              >
                 Register here
               </Link>
             </p>
@@ -122,12 +126,12 @@ const Login = () => {
 
         {/* Info */}
         <div className="mt-6 text-center text-xs text-gray-600">
-          <p>© 2024 Evidence Chain of Custody Platform</p>
+          <p>© 2025 Evidence Chain of Custody Platform</p>
           <p className="mt-1">Secured by Blockchain Technology</p>
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default Login
+export default Login;

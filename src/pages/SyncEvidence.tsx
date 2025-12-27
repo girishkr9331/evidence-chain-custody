@@ -113,6 +113,11 @@ const SyncEvidence = () => {
   }
 
   const syncAllEvidence = async () => {
+    if (!contract || !isConnected) {
+      toast.error('Please connect your wallet first')
+      return
+    }
+
     const notOnBlockchain = evidenceList.filter(e => !e.onBlockchain)
     
     if (notOnBlockchain.length === 0) {
@@ -120,20 +125,66 @@ const SyncEvidence = () => {
       return
     }
 
-    toast.loading(`Syncing ${notOnBlockchain.length} evidence items...`, { id: 'sync-all' })
+    const toastId = toast.loading(`Syncing ${notOnBlockchain.length} evidence items...`)
+    let successCount = 0
+    let failCount = 0
+    const errors: string[] = []
 
     for (const evidence of notOnBlockchain) {
       try {
-        await syncToBlockchain(evidence)
+        console.log('Syncing evidence to blockchain:', evidence.evidenceId)
+        
+        const metadata = JSON.stringify({
+          category: evidence.category,
+          description: evidence.description
+        })
+
+        const tx = await contract.registerEvidence(
+          evidence.evidenceId,
+          evidence.fileHash,
+          metadata,
+          evidence.caseId
+        )
+
+        toast.loading(`Syncing ${evidence.evidenceId}... (${successCount + 1}/${notOnBlockchain.length})`, { id: toastId })
+        await tx.wait()
+
+        successCount++
+        
         // Small delay between transactions
         await new Promise(resolve => setTimeout(resolve, 1000))
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error syncing:', evidence.evidenceId, error)
+        failCount++
+        
+        if (error.message?.includes('Not authorized') || error.reason?.includes('Not authorized')) {
+          errors.push('Not authorized to sync evidence')
+          break // Stop on authorization error
+        } else if (error.message?.includes('Evidence already exists')) {
+          // Don't count as failure if already exists
+          successCount++
+        } else {
+          errors.push(`${evidence.evidenceId}: ${error.reason || error.message}`)
+        }
       }
     }
 
-    toast.dismiss('sync-all')
-    toast.success('Sync complete!')
+    toast.dismiss(toastId)
+    
+    // Show final result
+    if (failCount === 0) {
+      toast.success(`Successfully synced ${successCount} evidence item(s) to blockchain!`)
+    } else if (successCount > 0) {
+      toast.success(`Synced ${successCount} items. ${failCount} failed.`)
+      if (errors.length > 0) {
+        toast.error(errors[0]) // Show first error
+      }
+    } else {
+      toast.error(errors[0] || 'Failed to sync evidence')
+    }
+    
+    // Reload to update status
+    loadEvidence()
   }
 
   const getStats = () => {
@@ -162,55 +213,55 @@ const SyncEvidence = () => {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Sync Evidence to Blockchain</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Sync Evidence to Blockchain</h1>
+          <p className="text-gray-600 dark:text-gray-300 mt-1">
             Register database evidence on the blockchain to enable full functionality
           </p>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-blue-600">Total Evidence</p>
-                <p className="text-2xl font-bold text-blue-900 mt-1">{stats.total}</p>
+                <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Total Evidence</p>
+                <p className="text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">{stats.total}</p>
               </div>
-              <RefreshCw className="w-8 h-8 text-blue-600" />
+              <RefreshCw className="w-8 h-8 text-blue-600 dark:text-blue-400" />
             </div>
           </div>
 
-          <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-green-600">On Blockchain</p>
-                <p className="text-2xl font-bold text-green-900 mt-1">{stats.onBlockchain}</p>
+                <p className="text-sm font-medium text-green-600 dark:text-green-400">On Blockchain</p>
+                <p className="text-2xl font-bold text-green-900 dark:text-green-300 mt-1">{stats.onBlockchain}</p>
               </div>
-              <CheckCircle className="w-8 h-8 text-green-600" />
+              <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
             </div>
           </div>
 
-          <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+          <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border border-orange-200 dark:border-orange-800">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-orange-600">Need Sync</p>
-                <p className="text-2xl font-bold text-orange-900 mt-1">{stats.notOnBlockchain}</p>
+                <p className="text-sm font-medium text-orange-600 dark:text-orange-400">Need Sync</p>
+                <p className="text-2xl font-bold text-orange-900 dark:text-orange-300 mt-1">{stats.notOnBlockchain}</p>
               </div>
-              <AlertTriangle className="w-8 h-8 text-orange-600" />
+              <AlertTriangle className="w-8 h-8 text-orange-600 dark:text-orange-400" />
             </div>
           </div>
         </div>
 
         {/* Sync All Button */}
         {stats.notOnBlockchain > 0 && (
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+          <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
             <div className="flex items-start gap-4">
-              <AlertTriangle className="w-6 h-6 text-orange-600 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="w-6 h-6 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h3 className="font-semibold text-orange-900 mb-1">
+                <h3 className="font-semibold text-orange-900 dark:text-orange-300 mb-1">
                   {stats.notOnBlockchain} evidence item(s) not on blockchain
                 </h3>
-                <p className="text-sm text-orange-800 mb-3">
+                <p className="text-sm text-orange-800 dark:text-orange-300 mb-3">
                   These evidence items are only in the database. Sync them to enable Record Access, Transfer, and Audit Trail features.
                 </p>
                 <button
@@ -227,32 +278,32 @@ const SyncEvidence = () => {
         )}
 
         {/* Evidence List */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="p-4 border-b border-gray-200 bg-gray-50">
-            <h2 className="font-semibold text-gray-900">Evidence Items</h2>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700">
+            <h2 className="font-semibold text-gray-900 dark:text-white">Evidence Items</h2>
           </div>
           
-          <div className="divide-y divide-gray-200">
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
             {evidenceList.map((evidence) => (
-              <div key={evidence.evidenceId} className="p-4 hover:bg-gray-50">
+              <div key={evidence.evidenceId} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-semibold text-gray-900">{evidence.evidenceId}</h3>
+                      <h3 className="font-semibold text-gray-900 dark:text-white">{evidence.evidenceId}</h3>
                       {evidence.onBlockchain ? (
-                        <span className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                        <span className="flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 text-xs font-medium rounded-full">
                           <CheckCircle className="w-3 h-3" />
                           On Blockchain
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-800 text-xs font-medium rounded-full">
+                        <span className="flex items-center gap-1 px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-400 text-xs font-medium rounded-full">
                           <XCircle className="w-3 h-3" />
                           Database Only
                         </span>
                       )}
                     </div>
                     
-                    <div className="text-sm text-gray-600 space-y-1">
+                    <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
                       <p><span className="font-medium">Case ID:</span> {evidence.caseId}</p>
                       <p><span className="font-medium">Category:</span> {evidence.category}</p>
                       <p><span className="font-medium">Description:</span> {evidence.description}</p>
@@ -278,8 +329,8 @@ const SyncEvidence = () => {
 
         {/* Info Box */}
         {!isConnected && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-800">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <p className="text-sm text-blue-800 dark:text-blue-300">
               <span className="font-semibold">Connect your wallet</span> to sync evidence to the blockchain
             </p>
           </div>

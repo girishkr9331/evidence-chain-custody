@@ -78,6 +78,14 @@ contract EvidenceChainOfCustody {
         _;
     }
     
+    modifier onlyAdminOrInvestigator() {
+        require(
+            msg.sender == admin || users[msg.sender].role == Role.INVESTIGATOR,
+            "Only admin or investigator can perform this action"
+        );
+        _;
+    }
+    
     modifier evidenceExistsCheck(string memory _evidenceId) {
         require(evidenceExists[_evidenceId], "Evidence does not exist");
         _;
@@ -343,7 +351,9 @@ contract EvidenceChainOfCustody {
         _triggerAlert(_evidenceId, msg.sender, _alertType, _message);
     }
     
-    function resolveAlert(uint256 _alertId) public onlyAdmin {
+    function resolveAlert(uint256 _alertId) public onlyAdminOrInvestigator {
+        require(_alertId < totalAlerts, "Invalid alert ID");
+        require(!alerts[_alertId].resolved, "Alert already resolved");
         alerts[_alertId].resolved = true;
     }
     
