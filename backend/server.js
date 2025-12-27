@@ -31,6 +31,8 @@ connectDB();
 import archiveRoutes from './routes/archive.js';
 import userRoutes from './routes/users.js';
 import auditLogRoutes from './routes/auditLog.js';
+import commentRoutes from './routes/comments.js';
+import alertRoutes from './routes/alerts.js';
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -38,6 +40,8 @@ app.use('/api/evidence', evidenceRoutes);
 app.use('/api/archive', archiveRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/comments', commentRoutes);
+app.use('/api/alerts', alertRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

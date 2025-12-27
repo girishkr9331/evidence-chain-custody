@@ -4,17 +4,14 @@ import Layout from '../components/Layout'
 import { useWeb3 } from '../context/Web3Context'
 import toast from 'react-hot-toast'
 import CryptoJS from 'crypto-js'
+import { evidenceVerificationService, VerificationResult } from '../services/evidenceVerificationService'
 
 const EvidenceVerify = () => {
   const [evidenceId, setEvidenceId] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [fileHash, setFileHash] = useState('')
   const [verifying, setVerifying] = useState(false)
-  const [result, setResult] = useState<{
-    verified: boolean
-    message: string
-    details?: any
-  } | null>(null)
+  const [result, setResult] = useState<VerificationResult | null>(null)
   const { contract, isConnected } = useWeb3()
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -36,78 +33,65 @@ const EvidenceVerify = () => {
   }
 
   const handleVerify = async () => {
-    if (!contract || !evidenceId || !fileHash) {
+    if (!evidenceId || !fileHash) {
       toast.error('Please provide evidence ID and upload a file')
       return
     }
 
     setVerifying(true)
+    const toastId = toast.loading('Verifying evidence...')
 
     try {
-      // Get evidence from blockchain
-      const evidence = await contract.getEvidence(evidenceId)
-      
-      console.log('Evidence from blockchain:', evidence)
-      console.log('Stored hash:', evidence.evidenceHash)
-      console.log('Current hash:', fileHash)
-      
-      // Compare hashes directly (they're already strings)
-      const storedHash = evidence.evidenceHash.toLowerCase()
-      const currentHash = fileHash.toLowerCase()
-      const isValid = storedHash === currentHash
-      
-      console.log('Hash comparison:', { storedHash, currentHash, isValid })
-      
-      // If tampering detected, trigger an alert
-      if (!isValid) {
-        try {
-          console.log('🚨 Tampering detected! Triggering alert...')
-          const alertTx = await contract.triggerAlert(
-            evidenceId,
-            'TAMPERING_DETECTED',
-            `Hash mismatch detected during verification. Expected: ${storedHash.slice(0, 16)}..., Found: ${currentHash.slice(0, 16)}...`
-          )
-          await alertTx.wait()
-          console.log('✅ Alert triggered successfully')
-          toast.success('Security alert has been triggered for this tampering attempt')
-        } catch (alertError) {
-          console.error('Error triggering alert:', alertError)
-          // Continue even if alert fails
-        }
-      }
-      
-      if (isValid) {
-        setResult({
-          verified: true,
-          message: 'Evidence integrity verified! The file matches the blockchain record.',
-          details: {
-            evidenceId: evidence.evidenceId,
-            caseId: evidence.caseId,
-            registeredHash: evidence.evidenceHash,
-            currentHash: fileHash,
-            collector: evidence.collector,
-            createdAt: new Date(Number(evidence.createdAt) * 1000).toLocaleString()
-          }
-        })
+      // Use the verification service which checks backend first, then blockchain
+      const verificationResult = await evidenceVerificationService.verifyEvidence(
+        evidenceId,
+        fileHash,
+        contract
+      )
+
+      setResult(verificationResult)
+
+      toast.dismiss(toastId)
+      if (verificationResult.verified) {
         toast.success('Evidence verified successfully!')
       } else {
-        setResult({
-          verified: false,
-          message: 'WARNING: Evidence integrity check FAILED! The file does not match the blockchain record.',
-          details: {
-            evidenceId: evidence.evidenceId,
-            registeredHash: evidence.evidenceHash,
-            currentHash: fileHash,
-            mismatch: true
-          }
-        })
         toast.error('Evidence verification failed!')
+        
+        // If tampering detected and we have contract, trigger alert
+        if (verificationResult.details?.mismatch && contract) {
+          try {
+            console.log('🚨 Triggering security alert for tampering...')
+            const alertTx = await contract.triggerAlert(
+              evidenceId,
+              'TAMPERING_DETECTED',
+              `Hash mismatch detected during verification`
+            )
+            await alertTx.wait()
+            toast.success('Security alert has been triggered', { duration: 3000 })
+          } catch (alertError) {
+            console.error('Error triggering alert:', alertError)
+          }
+        }
+      }
+
+      // If verified from blockchain, sync to backend
+      if (verificationResult.verified && contract && verificationResult.message.includes('blockchain')) {
+        console.log('🔄 Syncing evidence to backend...')
+        await evidenceVerificationService.syncEvidenceToBackend(evidenceId, contract)
       }
     } catch (error: any) {
-      console.error('Verification error:', error)
+      console.error('❌ Verification error:', error)
+      toast.dismiss(toastId)
+      
+      // Provide more helpful error message
+      let errorMessage = 'Verification failed. Please check the evidence ID and try again.'
+      if (error.code === 'ERR_NETWORK') {
+        errorMessage = 'Cannot connect to backend server. Please ensure the server is running.'
+      }
+      
       setResult({
         verified: false,
-        message: error.reason || 'Evidence not found or verification failed'
+        message: errorMessage
       })
       toast.error('Verification failed')
     } finally {
@@ -187,7 +171,7 @@ const EvidenceVerify = () => {
             <div className="flex gap-3">
               <button
                 onClick={handleVerify}
-                disabled={!isConnected || !evidenceId || !file || verifying}
+                disabled={!evidenceId || !file || verifying}
                 className="flex-1 py-3 px-6 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {verifying ? 'Verifying...' : 'Verify Evidence'}

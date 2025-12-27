@@ -4,10 +4,25 @@ import { authMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Get all evidence (no auth required for reading)
+// Get all evidence (no auth required for reading) - with search support
 router.get('/', async (req, res) => {
   try {
-    const evidence = await Evidence.find().sort({ createdAt: -1 });
+    const { search } = req.query;
+    let query = {};
+    
+    // If search query is provided, search by evidenceId, fileName, or caseId
+    if (search && search.trim()) {
+      query = {
+        $or: [
+          { evidenceId: { $regex: search, $options: 'i' } },
+          { fileName: { $regex: search, $options: 'i' } },
+          { caseId: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } }
+        ]
+      };
+    }
+    
+    const evidence = await Evidence.find(query).sort({ createdAt: -1 });
     res.json(evidence);
   } catch (error) {
     console.error('Error fetching evidence:', error);

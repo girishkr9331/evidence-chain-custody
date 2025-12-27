@@ -1,31 +1,39 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle, XCircle, Clock, Shield } from 'lucide-react'
+import { AlertTriangle, CheckCircle, XCircle, Clock, Shield, RefreshCw } from 'lucide-react'
 import Layout from '../components/Layout'
 import { useWeb3 } from '../context/Web3Context'
 import toast from 'react-hot-toast'
 import AlertStats from '../components/AlertStats'
-
-interface Alert {
-  id: number
-  evidenceId: string
-  triggeredBy: string
-  alertType: string
-  message: string
-  timestamp: number
-  resolved: boolean
-}
+import { persistentAlertService, Alert } from '../services/persistentAlertService'
 
 const Alerts = () => {
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [filter, setFilter] = useState<'ALL' | 'RESOLVED' | 'UNRESOLVED'>('ALL')
   const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
   const [canResolveAlerts, setCanResolveAlerts] = useState(false)
+  const [useBackend, setUseBackend] = useState(true)
   const { contract, isConnected, account } = useWeb3()
 
   useEffect(() => {
+    // Load filter preference from localStorage
+    const savedFilter = persistentAlertService.getFilterPreference()
+    setFilter(savedFilter)
+    
+    // Check if backend is available
+    checkBackendAvailability()
+    
     loadAlerts()
     checkResolvePermission()
   }, [contract, isConnected, account])
+
+  const checkBackendAvailability = async () => {
+    const available = await persistentAlertService.isBackendAvailable()
+    setUseBackend(available)
+    if (!available) {
+      console.warn('⚠️ Backend not available, using blockchain only')
+    }
+  }
 
   const checkResolvePermission = async () => {
     if (!contract || !isConnected || !account) {
@@ -65,6 +73,28 @@ const Alerts = () => {
   }
 
   const loadAlerts = async () => {
+    setLoading(true)
+    
+    // Try to load from backend first if available
+    if (useBackend) {
+      try {
+        const backendAlerts = await persistentAlertService.fetchAlerts()
+        if (backendAlerts.length > 0) {
+          setAlerts(backendAlerts)
+          setLoading(false)
+          
+          // Sync with blockchain in background if connected
+          if (contract && isConnected) {
+            syncWithBlockchain(backendAlerts)
+          }
+          return
+        }
+      } catch (error) {
+        console.error('Error loading alerts from backend:', error)
+      }
+    }
+
+    // Fallback to blockchain
     if (!contract || !isConnected) {
       setLoading(false)
       setAlerts([])
@@ -95,13 +125,114 @@ const Alerts = () => {
       // Sort by timestamp (newest first)
       alertsData.sort((a, b) => b.timestamp - a.timestamp)
       setAlerts(alertsData)
+      
+      // Sync to backend if available
+      if (useBackend && alertsData.length > 0) {
+        persistentAlertService.syncAlerts(alertsData)
+      }
     } catch (error) {
       console.error('Error loading alerts:', error)
-      // Only show error if we actually tried to load and failed
-      // Don't show error on initial load when wallet isn't connected
       setAlerts([])
     } finally {
       setLoading(false)
+    }
+  }
+
+  const syncWithBlockchain = async (backendAlerts: Alert[]) => {
+    if (!contract || !isConnected) return
+    
+    try {
+      const totalAlertsCount = await contract.totalAlerts()
+      const blockchainAlertCount = Number(totalAlertsCount)
+      
+      // If blockchain has more alerts, sync them to backend
+      if (blockchainAlertCount > backendAlerts.length) {
+        console.log('🔄 Syncing new alerts from blockchain...')
+        const newAlerts: Alert[] = []
+        
+        for (let i = backendAlerts.length; i < blockchainAlertCount; i++) {
+          try {
+            const alert = await contract.getAlert(i)
+            const newAlert: Alert = {
+              id: i,
+              evidenceId: alert.evidenceId,
+              triggeredBy: alert.triggeredBy,
+              alertType: alert.alertType,
+              message: alert.message,
+              timestamp: Number(alert.timestamp),
+              resolved: alert.resolved
+            }
+            newAlerts.push(newAlert)
+          } catch (err) {
+            console.error('Error loading alert:', i, err)
+          }
+        }
+        
+        if (newAlerts.length > 0 && useBackend) {
+          await persistentAlertService.syncAlerts(newAlerts)
+          // Reload to show synced alerts
+          const updatedAlerts = await persistentAlertService.fetchAlerts()
+          setAlerts(updatedAlerts)
+        }
+      }
+    } catch (error) {
+      console.error('Error syncing with blockchain:', error)
+    }
+  }
+
+  const handleManualSync = async () => {
+    if (!contract || !isConnected) {
+      toast.error('Please connect your wallet to sync')
+      return
+    }
+
+    if (!useBackend) {
+      toast.error('Backend is not available')
+      return
+    }
+
+    setSyncing(true)
+    const toastId = toast.loading('Syncing alerts from blockchain...')
+
+    try {
+      const totalAlertsCount = await contract.totalAlerts()
+      const alertsData: Alert[] = []
+
+      for (let i = 0; i < Number(totalAlertsCount); i++) {
+        try {
+          const alert = await contract.getAlert(i)
+          alertsData.push({
+            id: i,
+            evidenceId: alert.evidenceId,
+            triggeredBy: alert.triggeredBy,
+            alertType: alert.alertType,
+            message: alert.message,
+            timestamp: Number(alert.timestamp),
+            resolved: alert.resolved
+          })
+        } catch (err) {
+          console.error('Error loading alert:', i, err)
+        }
+      }
+
+      if (alertsData.length > 0) {
+        const result = await persistentAlertService.syncAlerts(alertsData)
+        toast.dismiss(toastId)
+        toast.success(`Synced ${result.synced} alerts successfully!`)
+        
+        // Reload alerts
+        const updatedAlerts = await persistentAlertService.fetchAlerts()
+        setAlerts(updatedAlerts)
+      } else {
+        toast.dismiss(toastId)
+        toast.info('No alerts to sync')
+      }
+    } catch (error) {
+      toast.dismiss(toastId)
+      toast.error('Failed to sync alerts')
+      console.error('Error syncing alerts:', error)
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -116,6 +247,11 @@ const Alerts = () => {
       const tx = await contract.resolveAlert(alertId)
       await tx.wait()
       
+      // Also update in backend if available
+      if (useBackend && account) {
+        await persistentAlertService.resolveAlert(alertId, account)
+      }
+      
       toast.dismiss(toastId)
       toast.success('Alert resolved successfully!')
       loadAlerts()
@@ -125,6 +261,11 @@ const Alerts = () => {
       }
       toast.error(error.reason || 'Failed to resolve alert')
     }
+  }
+
+  const handleFilterChange = (newFilter: 'ALL' | 'RESOLVED' | 'UNRESOLVED') => {
+    setFilter(newFilter)
+    persistentAlertService.saveFilterPreference(newFilter)
   }
 
   const filteredAlerts = alerts.filter(alert => {
@@ -178,11 +319,24 @@ const Alerts = () => {
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Security Alerts</h1>
-          <p className="text-gray-600 dark:text-gray-300 mt-1">
-            Monitor unauthorized access attempts and security events
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Security Alerts</h1>
+            <p className="text-gray-600 dark:text-gray-300 mt-1">
+              Monitor unauthorized access attempts and security events
+              {useBackend && <span className="ml-2 text-green-600 dark:text-green-400">● Persistent Storage Active</span>}
+            </p>
+          </div>
+          {isConnected && useBackend && (
+            <button
+              onClick={handleManualSync}
+              disabled={syncing}
+              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Syncing...' : 'Sync with Blockchain'}
+            </button>
+          )}
         </div>
 
         {/* Advanced Stats */}
@@ -229,7 +383,7 @@ const Alerts = () => {
               {(['ALL', 'UNRESOLVED', 'RESOLVED'] as const).map((f) => (
                 <button
                   key={f}
-                  onClick={() => setFilter(f)}
+                  onClick={() => handleFilterChange(f)}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     filter === f
                       ? 'bg-primary-600 text-white'

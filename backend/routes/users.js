@@ -4,32 +4,28 @@ import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Get all users (admin only)
+// Get all users (admin only) - with search support
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const users = await User.find().select('-password').sort({ createdAt: -1 });
+    const { search } = req.query;
+    let query = {};
+    
+    // If search query is provided, search by name or address
+    if (search && search.trim()) {
+      query = {
+        $or: [
+          { name: { $regex: search, $options: 'i' } },
+          { address: { $regex: search, $options: 'i' } },
+          { department: { $regex: search, $options: 'i' } }
+        ]
+      };
+    }
+    
+    const users = await User.find(query).select('-password').sort({ createdAt: -1 });
     res.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ message: 'Failed to fetch users' });
-  }
-});
-
-// Get user by address
-router.get('/:address', authenticateToken, async (req, res) => {
-  try {
-    const user = await User.findOne({ 
-      address: req.params.address.toLowerCase() 
-    }).select('-password');
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    res.json(user);
-  } catch (error) {
-    console.error('Error fetching user:', error);
-    res.status(500).json({ message: 'Failed to fetch user' });
   }
 });
 
@@ -38,8 +34,11 @@ router.post('/create', authenticateToken, async (req, res) => {
   try {
     const { address, name, role, department } = req.body;
 
+    console.log('📝 User creation request received:', { address, name, role, department });
+
     // Validate required fields
     if (!address || !name || !role || !department) {
+      console.error('❌ Missing required fields');
       return res.status(400).json({ 
         message: 'Missing required fields: address, name, role, department' 
       });
@@ -48,6 +47,7 @@ router.post('/create', authenticateToken, async (req, res) => {
     // Check if user already exists
     const existingUser = await User.findOne({ address: address.toLowerCase() });
     if (existingUser) {
+      console.log('⚠️ User already exists in database:', address);
       return res.status(400).json({ message: 'User already exists in database' });
     }
 
@@ -61,6 +61,7 @@ router.post('/create', authenticateToken, async (req, res) => {
     };
 
     const roleName = roleMapping[role.toString()] || role;
+    console.log('👤 Creating user with role:', roleName);
 
     // Create user with a default/temporary password
     // The user will need to set their password on first login
@@ -76,6 +77,7 @@ router.post('/create', authenticateToken, async (req, res) => {
     });
 
     await user.save();
+    console.log('✅ User saved to database successfully:', user._id);
 
     res.status(201).json({ 
       message: 'User created successfully in database',
@@ -90,7 +92,8 @@ router.post('/create', authenticateToken, async (req, res) => {
       note: 'User created with temporary password. They should register/login to set their actual password.'
     });
   } catch (error) {
-    console.error('User creation error:', error);
+    console.error('❌ User creation error:', error);
+    console.error('Error details:', error.stack);
     res.status(500).json({ 
       message: 'Failed to create user in database',
       error: error.message 
@@ -123,6 +126,41 @@ router.patch('/:address/status', authenticateToken, async (req, res) => {
   }
 });
 
+// Update user role
+router.patch('/:address/role', authenticateToken, async (req, res) => {
+  try {
+    const { role } = req.body;
+    
+    console.log('📝 Role update request:', { address: req.params.address, role });
+    
+    // Validate role
+    const validRoles = ['POLICE', 'INVESTIGATOR', 'FORENSIC_LAB', 'COURT', 'CYBER_UNIT'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ message: 'Invalid role' });
+    }
+    
+    const user = await User.findOneAndUpdate(
+      { address: req.params.address.toLowerCase() },
+      { role },
+      { new: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    console.log('✅ Role updated successfully:', user.role);
+
+    res.json({ 
+      message: 'User role updated successfully',
+      user 
+    });
+  } catch (error) {
+    console.error('❌ Error updating user role:', error);
+    res.status(500).json({ message: 'Failed to update user role' });
+  }
+});
+
 // Delete user
 router.delete('/:address', authenticateToken, async (req, res) => {
   try {
@@ -138,6 +176,24 @@ router.delete('/:address', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error deleting user:', error);
     res.status(500).json({ message: 'Failed to delete user' });
+  }
+});
+
+// Get user by address (must be last to avoid conflicts with other routes)
+router.get('/:address', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findOne({ 
+      address: req.params.address.toLowerCase() 
+    }).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    res.json(user);
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    res.status(500).json({ message: 'Failed to fetch user' });
   }
 });
 

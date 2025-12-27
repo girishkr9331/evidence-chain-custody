@@ -21,6 +21,8 @@ const EvidenceUpload = () => {
   const [hashingFile, setHashingFile] = useState(false);
   const [isUserRegistered, setIsUserRegistered] = useState(false);
   const [checkingUser, setCheckingUser] = useState(true);
+  const [userRole, setUserRole] = useState<number>(0);
+  const [canUpload, setCanUpload] = useState(false);
   const { contract, isConnected, account } = useWeb3();
   const navigate = useNavigate();
 
@@ -41,27 +43,53 @@ const EvidenceUpload = () => {
     if (!contract || !isConnected || !account) {
       setCheckingUser(false);
       setIsUserRegistered(false);
+      setCanUpload(false);
       return;
     }
 
     try {
       const user = await contract.getUser(account);
       const isRegistered = user.isActive;
-      
-      console.log('👤 User registration check:', {
+      const role = Number(user.role);
+
+      // Check if user is admin (contract owner)
+      let isContractAdmin = false;
+      try {
+        const contractAdmin = await contract.admin();
+        isContractAdmin = account.toLowerCase() === contractAdmin.toLowerCase();
+      } catch (error) {
+        console.error("Error checking admin status:", error);
+      }
+
+      // Role 1 = POLICE, Role 3 = FORENSIC_LAB
+      // Admin can always upload
+      const hasUploadPermission = isContractAdmin || role === 1 || role === 3;
+
+      console.log("👤 User registration and permission check:", {
         address: account,
         isActive: user.isActive,
-        role: Number(user.role),
-        name: user.name
+        role: role,
+        roleName: getRoleName(role),
+        name: user.name,
+        isAdmin: isContractAdmin,
+        canUpload: hasUploadPermission
       });
-      
+
       setIsUserRegistered(isRegistered);
+      setUserRole(role);
+      setCanUpload(isRegistered && hasUploadPermission);
     } catch (error) {
-      console.error('Error checking user registration:', error);
+      console.error("Error checking user registration:", error);
       setIsUserRegistered(false);
+      setCanUpload(false);
     } finally {
       setCheckingUser(false);
     }
+  };
+
+  const getRoleName = (role: number) => {
+    const roleNames = ['NONE', 'POLICE', 'INVESTIGATOR', 'FORENSIC_LAB', 'COURT', 'CYBER_UNIT'];
+    return roleNames[role] || 'UNKNOWN';
   };
 
   const handleChange = (
@@ -243,7 +271,8 @@ const EvidenceUpload = () => {
                   User Not Registered
                 </h3>
                 <p className="text-red-800 dark:text-red-300 text-sm mb-3">
-                  Your wallet address ({account?.slice(0, 8)}...{account?.slice(-6)}) is not registered as an authorized user. 
+                  Your wallet address ({account?.slice(0, 8)}...
+                  {account?.slice(-6)}) is not registered as an authorized user.
                   You need to be registered before you can upload evidence.
                 </p>
                 <div className="flex gap-3">
@@ -261,6 +290,34 @@ const EvidenceUpload = () => {
                     Recheck Status
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Insufficient Permissions Warning */}
+        {isConnected && !checkingUser && isUserRegistered && !canUpload && (
+          <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4 mb-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-orange-900 dark:text-orange-300 mb-1">
+                  Insufficient Permissions
+                </h3>
+                <p className="text-orange-800 dark:text-orange-300 text-sm mb-2">
+                  Your account ({account?.slice(0, 8)}...{account?.slice(-6)}) is registered with role: <strong>{getRoleName(userRole)}</strong>
+                </p>
+                <p className="text-orange-800 dark:text-orange-300 text-sm mb-3">
+                  Only users with the following roles can upload evidence:
+                </p>
+                <ul className="text-orange-800 dark:text-orange-300 text-sm list-disc list-inside mb-3">
+                  <li>Administrator (Contract Owner)</li>
+                  <li>Police Officer</li>
+                  <li>Forensic Lab Personnel</li>
+                </ul>
+                <p className="text-orange-800 dark:text-orange-300 text-sm">
+                  Please contact an administrator if you need upload permissions.
+                </p>
               </div>
             </div>
           </div>
@@ -425,7 +482,9 @@ const EvidenceUpload = () => {
             <div className="flex gap-4">
               <button
                 type="submit"
-                disabled={loading || !isConnected || hashingFile || !isUserRegistered}
+                disabled={
+                  loading || !isConnected || hashingFile || !canUpload
+                }
                 className="flex-1 py-3 px-6 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading

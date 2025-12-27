@@ -8,6 +8,7 @@ import CryptoJS from 'crypto-js'
 import axios from '../config/api'
 import AuditTimeline from '../components/AuditTimeline'
 import TestAlertButton from '../components/TestAlertButton'
+import EvidenceCommentSection from '../components/EvidenceCommentSection'
 
 const EvidenceDetails = () => {
   const { id } = useParams()
@@ -431,6 +432,12 @@ const EvidenceDetails = () => {
             </div>
           )}
         </div>
+
+        {/* Evidence Discussion/Comments Section */}
+        <EvidenceCommentSection 
+          evidenceId={evidence.evidenceId}
+          evidenceName={evidence.metadata.fileName || evidence.evidenceId}
+        />
       </div>
     </Layout>
   )

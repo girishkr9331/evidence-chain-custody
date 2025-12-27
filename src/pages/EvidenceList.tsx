@@ -289,39 +289,39 @@ const EvidenceList = () => {
               >
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
                       {evidence.evidenceId}
                     </h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    <p className="text-base text-gray-500 dark:text-gray-400 mt-1">
                       Case: {evidence.caseId}
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+                    <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-sm font-medium rounded-full">
                       {evidence.metadata.category || 'EVIDENCE'}
                     </span>
                     {getStatusBadge(evidence.evidenceId)}
                   </div>
                 </div>
 
-                <p className="text-sm text-gray-700 dark:text-gray-300 mb-4 line-clamp-2">
+                <p className="text-base text-gray-700 dark:text-gray-300 mb-4 line-clamp-2">
                   {evidence.metadata.description || 'No description available'}
                 </p>
 
                 <div className="space-y-2 mb-4">
-                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                    <User className="w-4 h-4" />
+                  <div className="flex items-center gap-2 text-base text-gray-600 dark:text-gray-400">
+                    <User className="w-5 h-5" />
                     <span>Custodian: {evidence.currentCustodian.slice(0, 6)}...{evidence.currentCustodian.slice(-4)}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                    <Calendar className="w-4 h-4" />
+                  <div className="flex items-center gap-2 text-base text-gray-600 dark:text-gray-400">
+                    <Calendar className="w-5 h-5" />
                     <span>
                       {new Date(evidence.createdAt * 1000).toLocaleDateString()}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                    <FileText className="w-4 h-4" />
-                    <span className="font-mono text-xs truncate">
+                  <div className="flex items-center gap-2 text-base text-gray-600 dark:text-gray-400">
+                    <FileText className="w-5 h-5" />
+                    <span className="font-mono text-sm truncate">
                       Hash: {evidence.evidenceHash.slice(0, 16)}...
                     </span>
                   </div>
@@ -330,17 +330,17 @@ const EvidenceList = () => {
                 <div className="flex gap-2">
                   <Link
                     to={`/evidence/${evidence.evidenceId}`}
-                    className="flex-1 flex items-center justify-center gap-2 py-2 px-4 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-primary-600 text-white text-base font-medium rounded-lg hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 transition-colors"
                   >
-                    <Eye className="w-4 h-4" />
+                    <Eye className="w-5 h-5" />
                     View Details
                   </Link>
                   <button
                     onClick={() => handleArchiveClick(evidence.evidenceId)}
-                    className="flex items-center justify-center gap-2 py-2 px-4 bg-orange-100 text-orange-700 font-medium rounded-lg hover:bg-orange-200 transition-colors"
+                    className="flex items-center justify-center gap-2 py-2.5 px-4 bg-orange-600 text-white text-base font-medium rounded-lg hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 transition-colors"
                     title="Manage Status"
                   >
-                    <Archive className="w-4 h-4" />
+                    <Archive className="w-5 h-5" />
                   </button>
                 </div>
               </div>

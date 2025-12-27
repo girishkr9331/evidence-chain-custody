@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
+import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Zap, X } from 'lucide-react'
 import Layout from '../components/Layout'
 import { useWeb3 } from '../context/Web3Context'
 import toast from 'react-hot-toast'
@@ -19,27 +19,99 @@ const SyncEvidence = () => {
   const [evidenceList, setEvidenceList] = useState<Evidence[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState<string | null>(null)
+  const [autoSyncing, setAutoSyncing] = useState(false)
+  const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0 })
+  const [showAutoSyncPrompt, setShowAutoSyncPrompt] = useState(false)
+  const [unsyncedCount, setUnsyncedCount] = useState(0)
   const { contract, isConnected, account } = useWeb3()
+
+  // Cache key for storing sync status
+  const SYNC_CACHE_KEY = 'evidence_sync_cache'
 
   useEffect(() => {
     loadEvidence()
   }, [contract, isConnected])
 
-  const loadEvidence = async () => {
+  // Check for unsynced evidence and prompt for auto-sync
+  useEffect(() => {
+    if (evidenceList.length > 0 && !autoSyncing) {
+      const notOnBlockchain = evidenceList.filter(e => !e.onBlockchain)
+      setUnsyncedCount(notOnBlockchain.length)
+      
+      if (notOnBlockchain.length > 0 && isConnected) {
+        setShowAutoSyncPrompt(true)
+      }
+    }
+  }, [evidenceList, isConnected, autoSyncing])
+
+  // Load sync cache from localStorage
+  const loadSyncCache = () => {
+    try {
+      const cache = localStorage.getItem(SYNC_CACHE_KEY)
+      return cache ? JSON.parse(cache) : {}
+    } catch (error) {
+      console.error('Error loading sync cache:', error)
+      return {}
+    }
+  }
+
+  // Save sync cache to localStorage
+  const saveSyncCache = (evidenceId: string, status: boolean) => {
+    try {
+      const cache = loadSyncCache()
+      cache[evidenceId] = {
+        synced: status,
+        timestamp: Date.now()
+      }
+      localStorage.setItem(SYNC_CACHE_KEY, JSON.stringify(cache))
+    } catch (error) {
+      console.error('Error saving sync cache:', error)
+    }
+  }
+
+  // Clear old cache entries (older than 7 days)
+  const clearOldCache = () => {
+    try {
+      const cache = loadSyncCache()
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000)
+      
+      Object.keys(cache).forEach(key => {
+        if (cache[key].timestamp < sevenDaysAgo) {
+          delete cache[key]
+        }
+      })
+      
+      localStorage.setItem(SYNC_CACHE_KEY, JSON.stringify(cache))
+    } catch (error) {
+      console.error('Error clearing old cache:', error)
+    }
+  }
+
+  const loadEvidence = async (forceRefresh = false) => {
     try {
       // Load all evidence from database
       const response = await axios.get('/api/evidence')
       const dbEvidence = response.data
+
+      // Clear old cache entries
+      clearOldCache()
+      const syncCache = loadSyncCache()
 
       // Check which ones are on blockchain
       const evidenceWithStatus = await Promise.all(
         dbEvidence.map(async (evidence: any) => {
           let onBlockchain = false
           
-          if (contract && isConnected) {
+          // First check cache if not forcing refresh
+          if (!forceRefresh && syncCache[evidence.evidenceId]?.synced) {
+            onBlockchain = true
+          } else if (contract && isConnected) {
+            // Verify on blockchain
             try {
               await contract.getEvidence(evidence.evidenceId)
               onBlockchain = true
+              // Update cache
+              saveSyncCache(evidence.evidenceId, true)
             } catch (error) {
               onBlockchain = false
             }
@@ -95,6 +167,9 @@ const SyncEvidence = () => {
       toast.dismiss('sync')
       toast.success('Evidence synced to blockchain successfully!')
       
+      // Update cache
+      saveSyncCache(evidence.evidenceId, true)
+      
       // Reload to update status
       loadEvidence()
     } catch (error: any) {
@@ -102,7 +177,8 @@ const SyncEvidence = () => {
       
       if (error.message?.includes('Evidence already exists')) {
         toast.error('Evidence already exists on blockchain')
-        // Still reload to update status
+        // Update cache and reload
+        saveSyncCache(evidence.evidenceId, true)
         loadEvidence()
       } else {
         toast.error(error.reason || 'Failed to sync evidence')
@@ -110,6 +186,96 @@ const SyncEvidence = () => {
     } finally {
       setSyncing(null)
     }
+  }
+
+  // Auto-sync all unsynced evidence with single confirmation
+  const autoSyncAll = async () => {
+    if (!contract || !isConnected) {
+      toast.error('Please connect your wallet first')
+      return
+    }
+
+    const notOnBlockchain = evidenceList.filter(e => !e.onBlockchain)
+    
+    if (notOnBlockchain.length === 0) {
+      toast.success('All evidence is already on blockchain!')
+      return
+    }
+
+    setAutoSyncing(true)
+    setShowAutoSyncPrompt(false)
+    setSyncProgress({ current: 0, total: notOnBlockchain.length })
+
+    let successCount = 0
+    let failCount = 0
+    const errors: string[] = []
+
+    for (let i = 0; i < notOnBlockchain.length; i++) {
+      const evidence = notOnBlockchain[i]
+      
+      try {
+        console.log(`[${i + 1}/${notOnBlockchain.length}] Syncing:`, evidence.evidenceId)
+        
+        const metadata = JSON.stringify({
+          category: evidence.category,
+          description: evidence.description
+        })
+
+        const tx = await contract.registerEvidence(
+          evidence.evidenceId,
+          evidence.fileHash,
+          metadata,
+          evidence.caseId
+        )
+
+        toast.loading(`Syncing ${i + 1}/${notOnBlockchain.length}: ${evidence.evidenceId}...`, { id: 'auto-sync' })
+        await tx.wait()
+
+        successCount++
+        setSyncProgress({ current: i + 1, total: notOnBlockchain.length })
+        
+        // Update cache
+        saveSyncCache(evidence.evidenceId, true)
+        
+        // Small delay between transactions to avoid nonce issues
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      } catch (error: any) {
+        console.error('Error syncing:', evidence.evidenceId, error)
+        
+        if (error.message?.includes('Evidence already exists')) {
+          // Don't count as failure if already exists
+          successCount++
+          saveSyncCache(evidence.evidenceId, true)
+        } else if (error.message?.includes('Not authorized') || error.reason?.includes('Not authorized')) {
+          errors.push('Not authorized to sync evidence')
+          failCount++
+          break // Stop on authorization error
+        } else {
+          failCount++
+          errors.push(`${evidence.evidenceId}: ${error.reason || error.message}`)
+        }
+      }
+    }
+
+    toast.dismiss('auto-sync')
+    
+    // Show final result
+    if (failCount === 0) {
+      toast.success(`✅ Successfully synced ${successCount} evidence item(s) to blockchain!`, { duration: 5000 })
+    } else if (successCount > 0) {
+      toast.success(`Synced ${successCount} items. ${failCount} failed.`, { duration: 5000 })
+      if (errors.length > 0) {
+        toast.error(errors[0], { duration: 5000 })
+      }
+    } else {
+      toast.error(errors[0] || 'Failed to sync evidence', { duration: 5000 })
+    }
+    
+    setAutoSyncing(false)
+    setSyncProgress({ current: 0, total: 0 })
+    
+    // Reload to update status
+    await loadEvidence(true)
   }
 
   const syncAllEvidence = async () => {
@@ -212,12 +378,98 @@ const SyncEvidence = () => {
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Sync Evidence to Blockchain</h1>
-          <p className="text-gray-600 dark:text-gray-300 mt-1">
-            Register database evidence on the blockchain to enable full functionality
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Sync Evidence to Blockchain</h1>
+            <p className="text-gray-600 dark:text-gray-300 mt-1">
+              Register database evidence on the blockchain to enable full functionality
+            </p>
+          </div>
+          <button
+            onClick={() => loadEvidence(true)}
+            disabled={loading || autoSyncing}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
+            title="Force refresh from blockchain"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
         </div>
+
+        {/* Auto-Sync Prompt */}
+        {showAutoSyncPrompt && !autoSyncing && unsyncedCount > 0 && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-2 border-blue-300 dark:border-blue-700 rounded-xl p-6 shadow-lg">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
+                  <Zap className="w-6 h-6 text-white" />
+                </div>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-blue-900 dark:text-blue-300 mb-2">
+                  🚀 Smart Auto-Sync Available
+                </h3>
+                <p className="text-blue-800 dark:text-blue-300 mb-4">
+                  Found <strong>{unsyncedCount}</strong> evidence item(s) not on blockchain. 
+                  Auto-sync will process all items in the background with progress tracking.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={autoSyncAll}
+                    className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-md hover:shadow-lg"
+                  >
+                    <Zap className="w-5 h-5" />
+                    Auto-Sync All ({unsyncedCount})
+                  </button>
+                  <button
+                    onClick={() => setShowAutoSyncPrompt(false)}
+                    className="px-6 py-3 border-2 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors font-medium"
+                  >
+                    Maybe Later
+                  </button>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAutoSyncPrompt(false)}
+                className="flex-shrink-0 text-blue-400 hover:text-blue-600 dark:text-blue-500 dark:hover:text-blue-300"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Auto-Sync Progress Bar */}
+        {autoSyncing && syncProgress.total > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <RefreshCw className="w-5 h-5 text-blue-600 animate-spin" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-gray-900 dark:text-white">
+                  Auto-Syncing Evidence to Blockchain
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Progress: {syncProgress.current} / {syncProgress.total} items
+                </p>
+              </div>
+              <span className="text-2xl font-bold text-blue-600">
+                {Math.round((syncProgress.current / syncProgress.total) * 100)}%
+              </span>
+            </div>
+            
+            {/* Progress Bar */}
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-blue-500 to-indigo-600 h-4 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${(syncProgress.current / syncProgress.total) * 100}%` }}
+              />
+            </div>
+            
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 text-center">
+              Please wait... This may take a few minutes. Do not close this page.
+            </p>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -252,8 +504,8 @@ const SyncEvidence = () => {
           </div>
         </div>
 
-        {/* Sync All Button */}
-        {stats.notOnBlockchain > 0 && (
+        {/* Sync All Button - Only show if auto-sync prompt is dismissed */}
+        {stats.notOnBlockchain > 0 && !showAutoSyncPrompt && !autoSyncing && (
           <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
             <div className="flex items-start gap-4">
               <AlertTriangle className="w-6 h-6 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
@@ -264,14 +516,24 @@ const SyncEvidence = () => {
                 <p className="text-sm text-orange-800 dark:text-orange-300 mb-3">
                   These evidence items are only in the database. Sync them to enable Record Access, Transfer, and Audit Trail features.
                 </p>
-                <button
-                  onClick={syncAllEvidence}
-                  disabled={!isConnected || syncing !== null}
-                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Sync All to Blockchain
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={autoSyncAll}
+                    disabled={!isConnected || syncing !== null}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Smart Auto-Sync All
+                  </button>
+                  <button
+                    onClick={syncAllEvidence}
+                    disabled={!isConnected || syncing !== null}
+                    className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Manual Sync (Old Method)
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -333,6 +595,32 @@ const SyncEvidence = () => {
             <p className="text-sm text-blue-800 dark:text-blue-300">
               <span className="font-semibold">Connect your wallet</span> to sync evidence to the blockchain
             </p>
+          </div>
+        )}
+
+        {/* Cache Info & Controls */}
+        {isConnected && stats.onBlockchain > 0 && (
+          <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                  💾 Smart Caching Enabled
+                </h4>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  Synced evidence status is cached locally to speed up page loads. Cache auto-clears after 7 days.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  localStorage.removeItem(SYNC_CACHE_KEY)
+                  toast.success('Cache cleared! Refreshing...')
+                  setTimeout(() => loadEvidence(true), 500)
+                }}
+                className="text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                Clear Cache
+              </button>
+            </div>
           </div>
         )}
       </div>

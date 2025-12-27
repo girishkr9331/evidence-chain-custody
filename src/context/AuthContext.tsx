@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import axios from '../config/api'
+import api from '../config/api'
 import toast from 'react-hot-toast'
 
 interface User {
@@ -56,7 +56,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (savedToken && savedUser) {
       setToken(savedToken)
       setUser(JSON.parse(savedUser))
-      axios.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`
+      // No need to set header here - interceptor handles it
     }
     
     setLoading(false)
@@ -64,12 +64,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (address: string, password: string) => {
     try {
-      const response = await axios.post('/api/auth/login', { address, password })
+      const response = await api.post('/api/auth/login', { address, password })
       const { token: authToken, user: userData } = response.data
       
       localStorage.setItem('token', authToken)
       localStorage.setItem('user', JSON.stringify(userData))
-      axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`
+      // No need to set header here - interceptor handles it
       
       setToken(authToken)
       setUser(userData)
@@ -83,7 +83,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const register = async (data: RegisterData) => {
     try {
-      const response = await axios.post('/api/auth/register', data)
+      const response = await api.post('/api/auth/register', data)
       toast.success(response.data.message || 'Registration successful!')
     } catch (error: any) {
       const message = error.response?.data?.message || 'Registration failed'
@@ -95,7 +95,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
-    delete axios.defaults.headers.common['Authorization']
+    // No need to delete header here - interceptor handles it
     setToken(null)
     setUser(null)
     toast.success('Logged out successfully')
