@@ -1,6 +1,6 @@
 # Dependencies
-node_modules/
-blockchain/node_modules/
+# node_modules/
+# blockchain/node_modules/
 
 # Production
 dist/
@@ -8,7 +8,7 @@ build/
 
 # Environment Variables (NEVER COMMIT THESE!)
 .env
-.env.local
+# .env.local
 .env.development
 .env.production
 .env.test
@@ -41,3 +41,4 @@ src/contracts/*.json
 
 # Temporary files
 tmp_rovodev_*
+node_modules
