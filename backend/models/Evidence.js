@@ -27,6 +27,27 @@ const evidenceSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  currentCustodian: {
+    type: String,
+    default: null
+  },
+  caseStatus: {
+    type: String,
+    enum: ['OPEN', 'CLOSED'],
+    default: 'OPEN'
+  },
+  closedBy: {
+    type: String,
+    default: null
+  },
+  closedAt: {
+    type: Date,
+    default: null
+  },
+  closureReason: {
+    type: String,
+    default: null
+  },
   blockchainTxHash: String,
   ipfsHash: String,
   metadata: {

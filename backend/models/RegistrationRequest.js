@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
-const userSchema = new mongoose.Schema({
+const registrationRequestSchema = new mongoose.Schema({
   address: {
     type: String,
     required: true,
@@ -25,23 +25,29 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  isActive: {
-    type: Boolean,
-    default: true
+  status: {
+    type: String,
+    enum: ['PENDING', 'APPROVED', 'REJECTED'],
+    default: 'PENDING'
   },
-  createdAt: {
+  requestedAt: {
     type: Date,
     default: Date.now
+  },
+  reviewedAt: {
+    type: Date
+  },
+  reviewedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  rejectionReason: {
+    type: String
   }
 });
 
 // Hash password before saving
-userSchema.pre('save', async function(next) {
-  // Skip hashing if password is already hashed (e.g., from registration approval)
-  if (this.$locals.skipPasswordHash) {
-    return next();
-  }
-  
+registrationRequestSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
   
   try {
@@ -53,9 +59,4 @@ userSchema.pre('save', async function(next) {
   }
 });
 
-// Compare password method
-userSchema.methods.comparePassword = async function(candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
-};
-
-export default mongoose.model('User', userSchema);
+export default mongoose.model('RegistrationRequest', registrationRequestSchema);

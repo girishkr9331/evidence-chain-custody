@@ -23,6 +23,8 @@ const SyncEvidence = () => {
   const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0 })
   const [showAutoSyncPrompt, setShowAutoSyncPrompt] = useState(false)
   const [unsyncedCount, setUnsyncedCount] = useState(0)
+  const [isUserAuthorized, setIsUserAuthorized] = useState<boolean | null>(null)
+  const [checkingAuth, setCheckingAuth] = useState(false)
   const { contract, isConnected, account } = useWeb3()
 
   // Cache key for storing sync status
@@ -30,7 +32,8 @@ const SyncEvidence = () => {
 
   useEffect(() => {
     loadEvidence()
-  }, [contract, isConnected])
+    checkUserAuthorization()
+  }, [contract, isConnected, account])
 
   // Check for unsynced evidence and prompt for auto-sync
   useEffect(() => {
@@ -66,6 +69,32 @@ const SyncEvidence = () => {
       localStorage.setItem(SYNC_CACHE_KEY, JSON.stringify(cache))
     } catch (error) {
       console.error('Error saving sync cache:', error)
+    }
+  }
+
+  // Check if current user is authorized on blockchain
+  const checkUserAuthorization = async () => {
+    if (!contract || !isConnected || !account) {
+      setIsUserAuthorized(null)
+      return
+    }
+
+    setCheckingAuth(true)
+    try {
+      const user = await contract.getUser(account)
+      const isAuthorized = user && user.isActive
+      setIsUserAuthorized(isAuthorized)
+      
+      if (!isAuthorized) {
+        console.warn('⚠️ User not authorized on blockchain:', account)
+      } else {
+        console.log('✅ User is authorized on blockchain')
+      }
+    } catch (error) {
+      console.error('Error checking user authorization:', error)
+      setIsUserAuthorized(false)
+    } finally {
+      setCheckingAuth(false)
     }
   }
 
@@ -144,6 +173,11 @@ const SyncEvidence = () => {
       return
     }
 
+    if (isUserAuthorized === false) {
+      toast.error('You are not authorized to sync evidence. Please contact an admin to register your account on the blockchain.')
+      return
+    }
+
     setSyncing(evidence.evidenceId)
 
     try {
@@ -192,6 +226,11 @@ const SyncEvidence = () => {
   const autoSyncAll = async () => {
     if (!contract || !isConnected) {
       toast.error('Please connect your wallet first')
+      return
+    }
+
+    if (isUserAuthorized === false) {
+      toast.error('You are not authorized to sync evidence. Please contact an admin to register your account on the blockchain.')
       return
     }
 
@@ -281,6 +320,11 @@ const SyncEvidence = () => {
   const syncAllEvidence = async () => {
     if (!contract || !isConnected) {
       toast.error('Please connect your wallet first')
+      return
+    }
+
+    if (isUserAuthorized === false) {
+      toast.error('You are not authorized to sync evidence. Please contact an admin to register your account on the blockchain.')
       return
     }
 
@@ -396,8 +440,62 @@ const SyncEvidence = () => {
           </button>
         </div>
 
+        {/* Authorization Warning */}
+        {isConnected && isUserAuthorized === false && (
+          <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-700 rounded-xl p-6 shadow-lg">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-red-900 dark:text-red-300 mb-2">
+                  ⚠️ User Not Authorized on Blockchain
+                </h3>
+                <p className="text-red-800 dark:text-red-300 mb-4">
+                  Your wallet address <code className="bg-red-100 dark:bg-red-900/50 px-2 py-1 rounded font-mono text-sm">{account?.slice(0, 10)}...{account?.slice(-8)}</code> is not registered on the blockchain. 
+                  You must be registered as an active user before you can sync evidence.
+                </p>
+                <div className="bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-700 rounded-lg p-4 mb-4">
+                  <h4 className="font-semibold text-red-900 dark:text-red-200 mb-2">📋 How to Fix:</h4>
+                  <ol className="list-decimal list-inside space-y-2 text-sm text-red-800 dark:text-red-300">
+                    <li>Go to <strong>User Management</strong> page</li>
+                    <li>Click <strong>"Add User"</strong> button (requires admin privileges)</li>
+                    <li>Enter your wallet address: <code className="bg-red-200 dark:bg-red-800 px-1 rounded">{account?.slice(0, 10)}...{account?.slice(-8)}</code></li>
+                    <li>Fill in your name, role, and department</li>
+                    <li>Click <strong>"Register User"</strong> to register on blockchain</li>
+                    <li>Return to this page and try syncing again</li>
+                  </ol>
+                </div>
+                <div className="flex gap-3">
+                  <a
+                    href="/users"
+                    className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium shadow-md hover:shadow-lg"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                    </svg>
+                    Go to User Management
+                  </a>
+                  <button
+                    onClick={checkUserAuthorization}
+                    disabled={checkingAuth}
+                    className="flex items-center gap-2 px-6 py-3 border-2 border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors font-medium"
+                  >
+                    <RefreshCw className={`w-5 h-5 ${checkingAuth ? 'animate-spin' : ''}`} />
+                    {checkingAuth ? 'Checking...' : 'Check Again'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Auto-Sync Prompt */}
-        {showAutoSyncPrompt && !autoSyncing && unsyncedCount > 0 && (
+        {showAutoSyncPrompt && !autoSyncing && unsyncedCount > 0 && isUserAuthorized !== false && (
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-2 border-blue-300 dark:border-blue-700 rounded-xl p-6 shadow-lg">
             <div className="flex items-start gap-4">
               <div className="flex-shrink-0">
@@ -472,40 +570,40 @@ const SyncEvidence = () => {
         )}
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 md:p-4 border border-blue-200 dark:border-blue-800">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Total Evidence</p>
-                <p className="text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">{stats.total}</p>
+                <p className="text-xs md:text-sm font-medium text-blue-600 dark:text-blue-400">Total Evidence</p>
+                <p className="text-xl md:text-2xl font-bold text-blue-900 dark:text-blue-300 mt-1">{stats.total}</p>
               </div>
-              <RefreshCw className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+              <RefreshCw className="w-6 h-6 md:w-8 md:h-8 text-blue-600 dark:text-blue-400" />
             </div>
           </div>
 
-          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
+          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 md:p-4 border border-green-200 dark:border-green-800">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-green-600 dark:text-green-400">On Blockchain</p>
-                <p className="text-2xl font-bold text-green-900 dark:text-green-300 mt-1">{stats.onBlockchain}</p>
+                <p className="text-xs md:text-sm font-medium text-green-600 dark:text-green-400">On Blockchain</p>
+                <p className="text-xl md:text-2xl font-bold text-green-900 dark:text-green-300 mt-1">{stats.onBlockchain}</p>
               </div>
-              <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+              <CheckCircle className="w-6 h-6 md:w-8 md:h-8 text-green-600 dark:text-green-400" />
             </div>
           </div>
 
-          <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border border-orange-200 dark:border-orange-800">
+          <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3 md:p-4 border border-orange-200 dark:border-orange-800 col-span-2 md:col-span-1">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-orange-600 dark:text-orange-400">Need Sync</p>
-                <p className="text-2xl font-bold text-orange-900 dark:text-orange-300 mt-1">{stats.notOnBlockchain}</p>
+                <p className="text-xs md:text-sm font-medium text-orange-600 dark:text-orange-400">Need Sync</p>
+                <p className="text-xl md:text-2xl font-bold text-orange-900 dark:text-orange-300 mt-1">{stats.notOnBlockchain}</p>
               </div>
-              <AlertTriangle className="w-8 h-8 text-orange-600 dark:text-orange-400" />
+              <AlertTriangle className="w-6 h-6 md:w-8 md:h-8 text-orange-600 dark:text-orange-400" />
             </div>
           </div>
         </div>
 
         {/* Sync All Button - Only show if auto-sync prompt is dismissed */}
-        {stats.notOnBlockchain > 0 && !showAutoSyncPrompt && !autoSyncing && (
+        {stats.notOnBlockchain > 0 && !showAutoSyncPrompt && !autoSyncing && isUserAuthorized !== false && (
           <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
             <div className="flex items-start gap-4">
               <AlertTriangle className="w-6 h-6 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
@@ -540,54 +638,73 @@ const SyncEvidence = () => {
         )}
 
         {/* Evidence List */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <div className="p-4 border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700">
-            <h2 className="font-semibold text-gray-900 dark:text-white">Evidence Items</h2>
-          </div>
-          
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {evidenceList.map((evidence) => (
-              <div key={evidence.evidenceId} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-semibold text-gray-900 dark:text-white">{evidence.evidenceId}</h3>
-                      {evidence.onBlockchain ? (
-                        <span className="flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 text-xs font-medium rounded-full">
-                          <CheckCircle className="w-3 h-3" />
-                          On Blockchain
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-400 text-xs font-medium rounded-full">
-                          <XCircle className="w-3 h-3" />
-                          Database Only
-                        </span>
-                      )}
+        {evidenceList.length > 0 ? (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700">
+              <h2 className="font-semibold text-gray-900 dark:text-white">Evidence Items</h2>
+            </div>
+            
+            <div className="divide-y divide-gray-200 dark:divide-gray-700">
+              {evidenceList.map((evidence) => (
+                <div key={evidence.evidenceId} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="font-semibold text-gray-900 dark:text-white">{evidence.evidenceId}</h3>
+                        {evidence.onBlockchain ? (
+                          <span className="flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 text-xs font-medium rounded-full">
+                            <CheckCircle className="w-3 h-3" />
+                            On Blockchain
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-400 text-xs font-medium rounded-full">
+                            <XCircle className="w-3 h-3" />
+                            Database Only
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                        <p><span className="font-medium">Case ID:</span> {evidence.caseId}</p>
+                        <p><span className="font-medium">Category:</span> {evidence.category}</p>
+                        <p><span className="font-medium">Description:</span> {evidence.description}</p>
+                        <p className="font-mono text-xs"><span className="font-medium">Hash:</span> {evidence.fileHash.slice(0, 32)}...</p>
+                      </div>
                     </div>
-                    
-                    <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                      <p><span className="font-medium">Case ID:</span> {evidence.caseId}</p>
-                      <p><span className="font-medium">Category:</span> {evidence.category}</p>
-                      <p><span className="font-medium">Description:</span> {evidence.description}</p>
-                      <p className="font-mono text-xs"><span className="font-medium">Hash:</span> {evidence.fileHash.slice(0, 32)}...</p>
-                    </div>
-                  </div>
 
-                  {!evidence.onBlockchain && (
-                    <button
-                      onClick={() => syncToBlockchain(evidence)}
-                      disabled={syncing === evidence.evidenceId || !isConnected}
-                      className="ml-4 flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-                    >
-                      <RefreshCw className={`w-4 h-4 ${syncing === evidence.evidenceId ? 'animate-spin' : ''}`} />
-                      {syncing === evidence.evidenceId ? 'Syncing...' : 'Sync to Blockchain'}
-                    </button>
-                  )}
+                    {!evidence.onBlockchain && (
+                      <button
+                        onClick={() => syncToBlockchain(evidence)}
+                        disabled={syncing === evidence.evidenceId || !isConnected || isUserAuthorized === false}
+                        className="ml-4 flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+                        title={isUserAuthorized === false ? 'You are not authorized. Register on blockchain first.' : 'Sync to blockchain'}
+                      >
+                        <RefreshCw className={`w-4 h-4 ${syncing === evidence.evidenceId ? 'animate-spin' : ''}`} />
+                        {syncing === evidence.evidenceId ? 'Syncing...' : 'Sync to Blockchain'}
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
+            <RefreshCw className="w-16 h-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              No Evidence Found
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              There are no evidence items in the database yet.
+            </p>
+            <a
+              href="/evidence/upload"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              Upload Evidence
+            </a>
+          </div>
+        )}
 
         {/* Info Box */}
         {!isConnected && (

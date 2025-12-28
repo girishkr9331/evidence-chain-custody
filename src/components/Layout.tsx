@@ -18,6 +18,7 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { useWeb3 } from '../context/Web3Context'
 import AlertBadge from './AlertBadge'
+import RegistrationBadge from './RegistrationBadge'
 import ThemeToggle from './ThemeToggle'
 import toast from 'react-hot-toast'
 
@@ -25,15 +26,22 @@ interface LayoutProps {
   children: ReactNode
 }
 
+interface NavigationItem {
+  name: string
+  href: string
+  icon: any
+  adminOnly?: boolean
+}
+
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [copied, setCopied] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, logout } = useAuth()
+  const { user, logout, isAdmin } = useAuth()
   const { account, connectWallet, isConnected } = useWeb3()
 
-  const navigation = [
+  const navigation: NavigationItem[] = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Upload Evidence', href: '/evidence/upload', icon: Upload },
     { name: 'Evidence List', href: '/evidence/list', icon: FolderOpen },
@@ -41,7 +49,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { name: 'Sync Evidence', href: '/evidence-sync', icon: RefreshCw },
     { name: 'Audit Trail', href: '/audit-trail', icon: FileText },
     { name: 'Alerts', href: '/alerts', icon: Bell },
-    { name: 'User Management', href: '/users', icon: Users },
+    { name: 'User Management', href: '/users', icon: Users, adminOnly: true },
+    { name: 'Registration Approval', href: '/registration-approval', icon: Users, adminOnly: true },
   ]
 
   const handleLogout = () => {
@@ -88,23 +97,25 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-            {navigation.map((item) => {
-              const isActive = location.pathname === item.href
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-primary-50 text-primary-700 dark:bg-primary-900 dark:text-primary-300'
-                      : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  <item.icon className="w-5 h-5 mr-3" />
-                  {item.name}
-                </Link>
-              )
-            })}
+            {navigation
+              .filter((item) => !item.adminOnly || isAdmin())
+              .map((item) => {
+                const isActive = location.pathname === item.href
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.href}
+                    className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-primary-50 text-primary-700 dark:bg-primary-900 dark:text-primary-300'
+                        : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5 mr-3" />
+                    {item.name}
+                  </Link>
+                )
+              })}
           </nav>
 
           {/* User Info */}
@@ -158,14 +169,31 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="flex items-center justify-between h-16 px-6">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+              aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
             >
-              <Menu className="w-6 h-6" />
+              <div className="relative w-6 h-6">
+                <Menu 
+                  className={`w-6 h-6 absolute inset-0 transition-all duration-300 ${
+                    sidebarOpen 
+                      ? 'opacity-0 rotate-90 scale-0' 
+                      : 'opacity-100 rotate-0 scale-100'
+                  }`}
+                />
+                <X 
+                  className={`w-6 h-6 absolute inset-0 transition-all duration-300 ${
+                    sidebarOpen 
+                      ? 'opacity-100 rotate-0 scale-100' 
+                      : 'opacity-0 -rotate-90 scale-0'
+                  }`}
+                />
+              </div>
             </button>
 
             <div className="flex items-center space-x-4">
               <ThemeToggle />
               <AlertBadge />
+              <RegistrationBadge />
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900 dark:text-white">{user?.department}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">{user?.role}</p>

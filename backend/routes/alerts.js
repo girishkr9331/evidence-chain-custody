@@ -1,6 +1,6 @@
 import express from 'express';
 import Alert from '../models/Alert.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -231,8 +231,8 @@ router.post('/sync/bulk', authMiddleware, async (req, res) => {
   }
 })
 
-// Mark alert as resolved
-router.patch('/:alertId/resolve', authMiddleware, async (req, res) => {
+// Mark alert as resolved (ADMIN only)
+router.patch('/:alertId/resolve', authMiddleware, roleMiddleware(['ADMIN']), async (req, res) => {
   try {
     const { resolvedBy } = req.body
     const alertId = parseInt(req.params.alertId)
@@ -273,8 +273,8 @@ router.patch('/:alertId/resolve', authMiddleware, async (req, res) => {
   }
 })
 
-// Delete alert (admin only)
-router.delete('/:alertId', authMiddleware, async (req, res) => {
+// Delete alert (ADMIN only)
+router.delete('/:alertId', authMiddleware, roleMiddleware(['ADMIN']), async (req, res) => {
   try {
     const alertId = parseInt(req.params.alertId)
     const alert = await Alert.findOneAndDelete({ alertId })

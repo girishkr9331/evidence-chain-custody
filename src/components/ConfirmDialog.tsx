@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { ReactNode } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface ConfirmDialogProps {
@@ -10,6 +10,8 @@ interface ConfirmDialogProps {
   onConfirm: () => void;
   onCancel: () => void;
   type?: 'danger' | 'warning' | 'info';
+  confirmButtonClass?: string;
+  children?: ReactNode;
 }
 
 const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -20,7 +22,9 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   cancelText = 'Cancel',
   onConfirm,
   onCancel,
-  type = 'warning'
+  type = 'warning',
+  confirmButtonClass,
+  children
 }) => {
   if (!isOpen) return null;
 
@@ -78,6 +82,13 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             {message}
           </p>
 
+          {/* Children (e.g., additional form fields) */}
+          {children && (
+            <div className="mb-6">
+              {children}
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex gap-3">
             <button
@@ -88,7 +99,7 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             </button>
             <button
               onClick={onConfirm}
-              className={`flex-1 px-4 py-2.5 ${colors.button} text-white rounded-lg transition-colors font-medium focus:outline-none focus:ring-2 focus:ring-offset-2`}
+              className={`flex-1 px-4 py-2.5 ${confirmButtonClass || colors.button} text-white rounded-lg transition-colors font-medium focus:outline-none focus:ring-2 focus:ring-offset-2`}
             >
               {confirmText}
             </button>

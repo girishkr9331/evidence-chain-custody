@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "server": "node backend/server.js",
     "blockchain": "cd blockchain && npx hardhat node",
-    "deploy": "cd blockchain && npx hardhat run scripts/deploy.js --network localhost"
+    "deploy": "cd blockchain && npx hardhat run scripts/deploy.js --network localhost",
+    "setup-admin": "node backend/scripts/setup-admin.js"
   },
   "dependencies": {
     "react": "^18.2.0",

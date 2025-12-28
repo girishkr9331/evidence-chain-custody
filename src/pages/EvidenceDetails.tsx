@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Hash, User, Calendar, Shield, FileText, CheckCircle, XCircle } from 'lucide-react'
+import { ArrowLeft, Hash, User, Calendar, Shield, FileText, CheckCircle, XCircle, Lock, Unlock } from 'lucide-react'
 import Layout from '../components/Layout'
 import { useWeb3 } from '../context/Web3Context'
+import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import CryptoJS from 'crypto-js'
 import axios from '../config/api'
@@ -14,12 +15,16 @@ const EvidenceDetails = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const { contract, isConnected, account } = useWeb3()
+  const { user, isAdmin } = useAuth()
   const [evidence, setEvidence] = useState<any>(null)
   const [auditTrail, setAuditTrail] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [verifying, setVerifying] = useState(false)
   const [transferTo, setTransferTo] = useState('')
   const [showTransfer, setShowTransfer] = useState(false)
+  const [showCloseCase, setShowCloseCase] = useState(false)
+  const [closureReason, setClosureReason] = useState('')
+  const [closingCase, setClosingCase] = useState(false)
 
   useEffect(() => {
     loadEvidenceDetails()
@@ -49,6 +54,23 @@ const EvidenceDetails = () => {
             metadata = { description: evidenceData.metadata }
           }
 
+          // Get case status from database (blockchain doesn't track this)
+          let caseStatus = 'OPEN'
+          let closedBy = null
+          let closedAt = null
+          let closureReason = null
+          try {
+            const dbResponse = await axios.get(`/api/evidence/${id}`)
+            if (dbResponse.data) {
+              caseStatus = dbResponse.data.caseStatus || 'OPEN'
+              closedBy = dbResponse.data.closedBy
+              closedAt = dbResponse.data.closedAt
+              closureReason = dbResponse.data.closureReason
+            }
+          } catch (dbError) {
+            console.log('ℹ️ Could not load case status from database, defaulting to OPEN')
+          }
+
           setEvidence({
             evidenceId: evidenceData.evidenceId,
             evidenceHash: evidenceData.evidenceHash,
@@ -56,7 +78,11 @@ const EvidenceDetails = () => {
             collector: evidenceData.collector,
             currentCustodian: evidenceData.currentCustodian,
             createdAt: Number(evidenceData.createdAt),
-            caseId: evidenceData.caseId
+            caseId: evidenceData.caseId,
+            caseStatus,
+            closedBy,
+            closedAt,
+            closureReason
           })
           evidenceLoaded = true
 
@@ -111,9 +137,13 @@ const EvidenceDetails = () => {
           ...dbEvidence.metadata
         },
         collector: dbEvidence.uploadedBy,
-        currentCustodian: dbEvidence.uploadedBy,
+        currentCustodian: dbEvidence.currentCustodian || dbEvidence.uploadedBy,
         createdAt: new Date(dbEvidence.createdAt).getTime() / 1000,
-        caseId: dbEvidence.caseId
+        caseId: dbEvidence.caseId,
+        caseStatus: dbEvidence.caseStatus || 'OPEN',
+        closedBy: dbEvidence.closedBy,
+        closedAt: dbEvidence.closedAt,
+        closureReason: dbEvidence.closureReason
       })
       evidenceLoaded = true
 
@@ -231,6 +261,52 @@ const EvidenceDetails = () => {
     }
   }
 
+  const handleCloseCase = async () => {
+    if (!user || !closureReason.trim()) {
+      toast.error('Please provide a closure reason')
+      return
+    }
+
+    setClosingCase(true)
+    const toastId = toast.loading('Closing case...')
+
+    try {
+      const response = await axios.patch(`/api/evidence/${id}/close`, {
+        closureReason: closureReason.trim()
+      })
+
+      if (response.data.success) {
+        toast.dismiss(toastId)
+        toast.success('Case closed successfully!')
+        setShowCloseCase(false)
+        setClosureReason('')
+        loadEvidenceDetails()
+      }
+    } catch (error: any) {
+      toast.dismiss(toastId)
+      const errorMsg = error.response?.data?.message || 'Failed to close case'
+      toast.error(errorMsg)
+      console.error('Error closing case:', error.response?.data)
+    } finally {
+      setClosingCase(false)
+    }
+  }
+
+  const canCloseCase = () => {
+    if (!user || !evidence) return false
+    
+    // Check if case is already closed
+    if (evidence.caseStatus === 'CLOSED') return false
+    
+    // Admin can always close
+    if (isAdmin()) return true
+    
+    // Current custodian can close
+    const userAddress = user.address.toLowerCase()
+    const custodian = evidence.currentCustodian?.toLowerCase()
+    return userAddress === custodian
+  }
+
   const getActionName = (action: number) => {
     const actions = ['COLLECTED', 'UPLOADED', 'ACCESSED', 'TRANSFERRED', 'ANALYZED', 'VERIFIED', 'MODIFIED']
     return actions[action] || 'UNKNOWN'
@@ -274,9 +350,17 @@ const EvidenceDetails = () => {
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{evidence.evidenceId}</h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">Case: {evidence.caseId}</p>
           </div>
-          <span className="px-4 py-2 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-medium rounded-lg">
-            Active
-          </span>
+          {evidence.caseStatus === 'CLOSED' ? (
+            <span className="px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 font-medium rounded-lg flex items-center gap-2">
+              <Lock className="w-4 h-4" />
+              Case Closed
+            </span>
+          ) : (
+            <span className="px-4 py-2 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-medium rounded-lg flex items-center gap-2">
+              <Unlock className="w-4 h-4" />
+              Case Open
+            </span>
+          )}
         </div>
 
         {/* Evidence Details Card */}
@@ -381,7 +465,54 @@ const EvidenceDetails = () => {
             >
               View Full Audit Trail
             </Link>
+            
+            {canCloseCase() && evidence.caseStatus !== 'CLOSED' && (
+              <button
+                onClick={() => setShowCloseCase(!showCloseCase)}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+              >
+                <Lock className="w-4 h-4" />
+                Close Case
+              </button>
+            )}
           </div>
+          
+          {showCloseCase && (
+            <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+              <h3 className="text-sm font-semibold text-red-900 dark:text-red-300 mb-3">Close Case</h3>
+              <p className="text-sm text-red-800 dark:text-red-300 mb-3">
+                Closing this case will mark it as completed. Only the current custodian or admin can perform this action.
+              </p>
+              <label className="block text-sm font-medium text-red-900 dark:text-red-300 mb-2">
+                Closure Reason *
+              </label>
+              <textarea
+                value={closureReason}
+                onChange={(e) => setClosureReason(e.target.value)}
+                placeholder="Provide a reason for closing this case (e.g., Case resolved, Evidence analyzed and documented, Investigation complete)"
+                rows={3}
+                className="w-full px-4 py-2 border border-red-300 dark:border-red-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-red-500"
+              />
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={handleCloseCase}
+                  disabled={closingCase || !closureReason.trim()}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {closingCase ? 'Closing...' : 'Confirm Close Case'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCloseCase(false)
+                    setClosureReason('')
+                  }}
+                  className="px-4 py-2 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
           
           {showTransfer && (
             <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">

@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Shield, Wallet } from 'lucide-react'
+import { Shield, Wallet, CheckCircle, Clock } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useWeb3 } from '../context/Web3Context'
 
@@ -13,6 +13,7 @@ const Register = () => {
     confirmPassword: ''
   })
   const [loading, setLoading] = useState(false)
+  const [registrationSuccess, setRegistrationSuccess] = useState(false)
   const { register } = useAuth()
   const { connectWallet, account } = useWeb3()
   const navigate = useNavigate()
@@ -41,16 +42,30 @@ const Register = () => {
     setLoading(true)
 
     try {
+      console.log('📝 Submitting registration:', {
+        address: account.toLowerCase(),
+        name: formData.name,
+        role: formData.role,
+        department: formData.department
+      })
+      
       await register({
-        address: account,
+        address: account.toLowerCase(),
         password: formData.password,
         name: formData.name,
         role: formData.role,
         department: formData.department
       })
-      navigate('/login')
-    } catch (error) {
-      console.error('Registration error:', error)
+      setRegistrationSuccess(true)
+    } catch (error: any) {
+      console.error('❌ Registration error:', error)
+      console.error('   Status:', error.response?.status)
+      console.error('   Message:', error.response?.data?.message)
+      console.error('   Full response:', error.response?.data)
+      
+      // Show detailed error to user
+      const errorMessage = error.response?.data?.message || 'Registration failed. Please try again.'
+      alert(`Registration Error: ${errorMessage}`)
     } finally {
       setLoading(false)
     }
@@ -61,6 +76,51 @@ const Register = () => {
       ...formData,
       [e.target.name]: e.target.value
     })
+  }
+
+  // Show success message if registration is pending approval
+  if (registrationSuccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-primary-100 px-4 py-12">
+        <div className="max-w-md w-full animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+            <div className="flex justify-center mb-6">
+              <div className="p-4 bg-yellow-100 rounded-full animate-bounce-slow">
+                <Clock className="w-16 h-16 text-yellow-600 animate-pulse" />
+              </div>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">
+              Registration Pending Approval
+            </h2>
+            <p className="text-gray-600 mb-6">
+              Your registration request has been submitted successfully. An administrator will review your request and approve your account.
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+              <p className="text-sm text-blue-800 font-medium mb-2">
+                What happens next?
+              </p>
+              <ul className="text-sm text-blue-700 text-left space-y-1">
+                <li className="animate-slide-in-left" style={{ animationDelay: '0.3s' }}>• Admin will review your registration details</li>
+                <li className="animate-slide-in-left" style={{ animationDelay: '0.4s' }}>• You'll be notified once your account is approved</li>
+                <li className="animate-slide-in-left" style={{ animationDelay: '0.5s' }}>• You can then login with your credentials</li>
+              </ul>
+            </div>
+            <Link
+              to="/login"
+              className="inline-block w-full py-3 px-4 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 hover:scale-105 transition-all duration-200 transform mb-3"
+            >
+              Go to Login
+            </Link>
+            <Link
+              to="/registration-status"
+              className="inline-block w-full py-3 px-4 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 hover:scale-105 transition-all duration-200 transform"
+            >
+              Check Registration Status
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -212,11 +272,16 @@ const Register = () => {
           </form>
 
           {/* Login Link */}
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center space-y-2">
             <p className="text-sm text-gray-600">
               Already have an account?{' '}
               <Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium">
                 Sign in here
+              </Link>
+            </p>
+            <p className="text-sm text-gray-600">
+              <Link to="/registration-status" className="text-primary-600 hover:text-primary-700 font-medium">
+                Check Registration Status
               </Link>
             </p>
           </div>

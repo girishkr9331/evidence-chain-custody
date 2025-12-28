@@ -59,11 +59,31 @@ const UserHoverCard: React.FC<UserHoverCardProps> = ({ userAddress, userName, ch
 
   const handleMouseEnter = (e: React.MouseEvent) => {
     setIsHovering(true);
-    // Position the card near the mouse
+    // Position the card next to the hovered element
     const rect = e.currentTarget.getBoundingClientRect();
+    const cardWidth = 320; // Width of the hover card (w-80 = 320px)
+    const cardHeight = 280; // Approximate height of the hover card
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+    const gap = 8; // Gap between trigger and card
+    
+    // Determine horizontal position (prefer right side)
+    const spaceRight = viewportWidth - rect.right;
+    const spaceLeft = rect.left;
+    const shouldPositionLeft = spaceRight < cardWidth && spaceLeft > cardWidth;
+    
+    // Determine vertical position (align with top of element, but adjust if needed)
+    let topPosition = rect.top;
+    const spaceBelow = viewportHeight - rect.top;
+    
+    // If card would overflow bottom, adjust upward
+    if (spaceBelow < cardHeight) {
+      topPosition = Math.max(8, viewportHeight - cardHeight - 8);
+    }
+    
     setPosition({
-      top: rect.bottom + 8,
-      left: rect.left
+      top: topPosition,
+      left: shouldPositionLeft ? rect.left - cardWidth - gap : rect.right + gap
     });
   };
 

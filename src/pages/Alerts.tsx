@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, CheckCircle, XCircle, Clock, Shield, RefreshCw } from 'lucide-react'
 import Layout from '../components/Layout'
 import { useWeb3 } from '../context/Web3Context'
+import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import AlertStats from '../components/AlertStats'
 import { persistentAlertService, Alert } from '../services/persistentAlertService'
@@ -11,9 +12,9 @@ const Alerts = () => {
   const [filter, setFilter] = useState<'ALL' | 'RESOLVED' | 'UNRESOLVED'>('ALL')
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
-  const [canResolveAlerts, setCanResolveAlerts] = useState(false)
   const [useBackend, setUseBackend] = useState(true)
   const { contract, isConnected, account } = useWeb3()
+  const { isAdmin } = useAuth()
 
   useEffect(() => {
     // Load filter preference from localStorage
@@ -24,7 +25,6 @@ const Alerts = () => {
     checkBackendAvailability()
     
     loadAlerts()
-    checkResolvePermission()
   }, [contract, isConnected, account])
 
   const checkBackendAvailability = async () => {
@@ -35,42 +35,6 @@ const Alerts = () => {
     }
   }
 
-  const checkResolvePermission = async () => {
-    if (!contract || !isConnected || !account) {
-      setCanResolveAlerts(false)
-      return
-    }
-
-    try {
-      // Check if user is admin
-      const contractAdmin = await contract.admin()
-      const isAdmin = account.toLowerCase() === contractAdmin.toLowerCase()
-      
-      if (isAdmin) {
-        console.log('✅ You are the admin - can resolve alerts')
-        setCanResolveAlerts(true)
-        return
-      }
-
-      // Check if user is an investigator (Role.INVESTIGATOR = 2)
-      const user = await contract.getUser(account)
-      const userRole = Number(user.role)
-      const isInvestigator = userRole === 2 && user.isActive
-      
-      console.log('👮 Alert resolution permission check:', {
-        address: account,
-        role: userRole,
-        isAdmin: isAdmin,
-        isInvestigator: isInvestigator,
-        canResolve: isAdmin || isInvestigator
-      })
-      
-      setCanResolveAlerts(isInvestigator)
-    } catch (error) {
-      console.error('Error checking resolve permission:', error)
-      setCanResolveAlerts(false)
-    }
-  }
 
   const loadAlerts = async () => {
     setLoading(true)
@@ -339,41 +303,42 @@ const Alerts = () => {
           )}
         </div>
 
-        {/* Advanced Stats */}
-        {isConnected && <AlertStats />}
-
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Total Alerts</p>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">{stats.total}</p>
+        {isConnected ? (
+          <AlertStats />
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-3 md:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs md:text-sm font-medium text-gray-600 dark:text-gray-300">Total Alerts</p>
+                  <p className="text-xl md:text-3xl font-bold text-gray-900 dark:text-white mt-1">{stats.total}</p>
+                </div>
+                <AlertTriangle className="w-6 h-6 md:w-10 md:h-10 text-blue-500" />
               </div>
-              <AlertTriangle className="w-10 h-10 text-blue-500" />
             </div>
-          </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Unresolved</p>
-                <p className="text-3xl font-bold text-red-600 dark:text-red-400 mt-1">{stats.unresolved}</p>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-3 md:p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs md:text-sm font-medium text-gray-600 dark:text-gray-300">Unresolved</p>
+                  <p className="text-xl md:text-3xl font-bold text-red-600 dark:text-red-400 mt-1">{stats.unresolved}</p>
+                </div>
+                <XCircle className="w-6 h-6 md:w-10 md:h-10 text-red-500" />
               </div>
-              <XCircle className="w-10 h-10 text-red-500" />
             </div>
-          </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Resolved</p>
-                <p className="text-3xl font-bold text-green-600 dark:text-green-400 mt-1">{stats.resolved}</p>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-3 md:p-6 col-span-2 md:col-span-1">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs md:text-sm font-medium text-gray-600 dark:text-gray-300">Resolved</p>
+                  <p className="text-xl md:text-3xl font-bold text-green-600 dark:text-green-400 mt-1">{stats.resolved}</p>
+                </div>
+                <CheckCircle className="w-6 h-6 md:w-10 md:h-10 text-green-500" />
               </div>
-              <CheckCircle className="w-10 h-10 text-green-500" />
             </div>
           </div>
-        </div>
+        )}
 
         {/* Filter */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
@@ -453,33 +418,14 @@ const Alerts = () => {
                     </div>
                   </div>
 
-                  {!alert.resolved && (
-                    <div className="relative group ml-4">
+                  {!alert.resolved && isAdmin() && (
+                    <div className="ml-4">
                       <button
-                        onClick={() => canResolveAlerts && handleResolveAlert(alert.id)}
-                        disabled={!canResolveAlerts}
-                        className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
-                          canResolveAlerts
-                            ? 'bg-green-600 text-white hover:bg-green-700'
-                            : 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-500 cursor-not-allowed'
-                        }`}
+                        onClick={() => handleResolveAlert(alert.id)}
+                        className="px-4 py-2 rounded-lg transition-colors text-sm font-medium bg-green-600 text-white hover:bg-green-700"
                       >
                         Resolve
                       </button>
-                      {!canResolveAlerts && (
-                        <div className="absolute top-full right-0 mt-2 hidden group-hover:block w-72 z-50">
-                          <div className="bg-gray-900 dark:bg-gray-700 text-white text-sm rounded-lg px-3 py-2 shadow-lg">
-                            <p className="font-semibold mb-1 flex items-center gap-1">
-                              <Shield className="w-4 h-4" />
-                              Admin/Investigator Access Required
-                            </p>
-                            <p>Only administrators and investigators can resolve security alerts. Contact your system admin for assistance.</p>
-                            <div className="absolute bottom-full right-4 -mb-1">
-                              <div className="border-8 border-transparent border-b-gray-900 dark:border-b-gray-700"></div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>

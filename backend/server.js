@@ -33,6 +33,7 @@ import userRoutes from './routes/users.js';
 import auditLogRoutes from './routes/auditLog.js';
 import commentRoutes from './routes/comments.js';
 import alertRoutes from './routes/alerts.js';
+import registrationRequestRoutes from './routes/registrationRequests.js';
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -42,6 +43,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/alerts', alertRoutes);
+app.use('/api/registration-requests', registrationRequestRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

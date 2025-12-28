@@ -1,40 +1,52 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import RegistrationRequest from '../models/RegistrationRequest.js';
 
 const router = express.Router();
 
-// Register
+// Register - Creates a pending registration request
 router.post('/register', async (req, res) => {
   try {
     const { address, password, name, role, department } = req.body;
 
-    // Check if user exists
+    // Check if user already exists
     const existingUser = await User.findOne({ address: address.toLowerCase() });
     if (existingUser) {
       return res.status(400).json({ message: 'User already exists' });
     }
 
-    // Create new user
-    const user = new User({
+    // Check if there's already a pending request
+    const existingRequest = await RegistrationRequest.findOne({ 
+      address: address.toLowerCase(),
+      status: 'PENDING'
+    });
+    if (existingRequest) {
+      return res.status(400).json({ message: 'Registration request already pending approval' });
+    }
+
+    // Check for rejected/approved requests and delete them to allow re-registration
+    await RegistrationRequest.deleteMany({ 
+      address: address.toLowerCase(),
+      status: { $in: ['REJECTED', 'APPROVED'] }
+    });
+
+    // Create new registration request
+    const registrationRequest = new RegistrationRequest({
       address: address.toLowerCase(),
       password,
       name,
       role,
-      department
+      department,
+      status: 'PENDING'
     });
 
-    await user.save();
+    await registrationRequest.save();
 
     res.status(201).json({ 
-      message: 'User registered successfully',
-      user: {
-        id: user._id,
-        address: user.address,
-        name: user.name,
-        role: user.role,
-        department: user.department
-      }
+      message: 'Registration request submitted successfully. Please wait for admin approval.',
+      requestId: registrationRequest._id,
+      status: 'PENDING'
     });
   } catch (error) {
     console.error('Registration error:', error);

@@ -56,41 +56,55 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
       setProvider(web3Provider)
       setNetworkId(chainId)
 
-      // Load contract first, then set isConnected
+      // Load contract
       try {
         const contractData = await import('../contracts/EvidenceChainOfCustody.json')
         
         // Check if contract address exists
         if (!contractData.address || contractData.address === '0x0000000000000000000000000000000000000000') {
-          throw new Error('Contract address not configured')
+          console.warn('Contract address not configured')
+          throw new Error('Contract address not configured. Please deploy the smart contract.')
         }
         
+        // Test if contract is actually deployed
+        const code = await web3Provider.getCode(contractData.address)
+        if (code === '0x' || code === '0x0') {
+          throw new Error('Contract not deployed at this address. Please run: cd blockchain && npx hardhat run scripts/deploy.js --network localhost')
+        }
+        
+        // Create contract instance
         const evidenceContract = new Contract(
           contractData.address,
           contractData.abi,
           signer
         )
         
-        // Test if contract is actually deployed
+        // Verify contract is responsive (optional health check)
         try {
-          const code = await web3Provider.getCode(contractData.address)
-          if (code === '0x') {
-            throw new Error('Contract not deployed at this address. Please deploy the smart contract first.')
-          }
-        } catch (codeError) {
-          console.error('Contract deployment check failed:', codeError)
-          throw new Error('Contract not deployed on this network. Please run: cd blockchain && npx hardhat run scripts/deploy.js --network localhost')
+          // Try to call a view function to verify contract works
+          await evidenceContract.totalEvidence()
+        } catch (contractError) {
+          console.warn('Contract health check warning:', contractError)
+          // Continue anyway - contract might still work
         }
         
-        // Only set these if contract is successfully loaded
+        // Set contract and connection status
         setContract(evidenceContract)
         setIsConnected(true)
-        toast.success('Wallet and contract connected successfully!')
+        toast.success(`Wallet connected: ${address.slice(0, 6)}...${address.slice(-4)}`)
       } catch (error: any) {
-        console.error('Contract not deployed:', error)
+        console.error('Contract loading error:', error)
         setContract(null)
         setIsConnected(false)
-        toast.error(error.message || 'Smart contract not found. Please deploy the contract first.')
+        
+        // Provide helpful error messages
+        if (error.message.includes('not deployed')) {
+          toast.error('Smart contract not deployed. Please deploy it first.')
+        } else if (error.message.includes('not configured')) {
+          toast.error('Contract address not found. Please check deployment.')
+        } else {
+          toast.error(error.message || 'Failed to load smart contract')
+        }
       }
 
     } catch (error: any) {
@@ -100,25 +114,57 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
   }
 
   useEffect(() => {
+    // Auto-connect if wallet was previously connected
+    const checkConnection = async () => {
+      if (window.ethereum) {
+        try {
+          const ethereumProvider = window.ethereum as any
+          const accounts = await ethereumProvider.request({ method: 'eth_accounts' })
+          
+          if (accounts && accounts.length > 0) {
+            // Wallet is already connected, auto-connect
+            console.log('Wallet already connected, auto-connecting...')
+            await connectWallet()
+          }
+        } catch (error) {
+          console.error('Auto-connect check failed:', error)
+        }
+      }
+    }
+    
+    checkConnection()
+
+    // Set up event listeners
     if (window.ethereum) {
-      const ethereumProvider = window.ethereum as Eip1193Provider
+      const ethereumProvider = window.ethereum as any
       
       // Handle account changes
-      ethereumProvider.on?.('accountsChanged', (accounts: string[]) => {
+      const handleAccountsChanged = (accounts: string[]) => {
         if (accounts.length === 0) {
           setAccount(null)
           setIsConnected(false)
+          setContract(null)
           toast.error('Wallet disconnected')
         } else {
           setAccount(accounts[0])
           toast.success('Account changed')
         }
-      })
+      }
 
       // Handle chain changes
-      ethereumProvider.on?.('chainChanged', () => {
+      const handleChainChanged = () => {
         window.location.reload()
-      })
+      }
+
+      // Add event listeners
+      ethereumProvider.on?.('accountsChanged', handleAccountsChanged)
+      ethereumProvider.on?.('chainChanged', handleChainChanged)
+
+      // Cleanup function
+      return () => {
+        ethereumProvider.removeListener?.('accountsChanged', handleAccountsChanged)
+        ethereumProvider.removeListener?.('chainChanged', handleChainChanged)
+      }
     }
   }, [])
 
@@ -141,6 +187,10 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
 // Extend Window interface for ethereum
 declare global {
   interface Window {
-    ethereum?: Eip1193Provider
+    ethereum?: Eip1193Provider & {
+      on?: (event: string, callback: (...args: any[]) => void) => void
+      removeListener?: (event: string, callback: (...args: any[]) => void) => void
+      request?: (args: { method: string; params?: any[] }) => Promise<any>
+    }
   }
 }

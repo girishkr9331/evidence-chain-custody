@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import RegistrationStatus from './pages/RegistrationStatus'
 import Dashboard from './pages/Dashboard'
 import EvidenceUpload from './pages/EvidenceUpload'
 import EvidenceList from './pages/EvidenceList'
@@ -14,6 +15,8 @@ import SyncEvidence from './pages/SyncEvidence'
 import AuditTrail from './pages/AuditTrail'
 import UserManagement from './pages/UserManagement'
 import Alerts from './pages/Alerts'
+import RegistrationApproval from './pages/RegistrationApproval'
+import AdminChecker from './pages/AdminChecker'
 import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
@@ -27,6 +30,7 @@ function App() {
               <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/registration-status" element={<RegistrationStatus />} />
               
               <Route path="/dashboard" element={
                 <ProtectedRoute>
@@ -79,6 +83,18 @@ function App() {
               <Route path="/alerts" element={
                 <ProtectedRoute>
                   <Alerts />
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/registration-approval" element={
+                <ProtectedRoute>
+                  <RegistrationApproval />
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/admin-checker" element={
+                <ProtectedRoute>
+                  <AdminChecker />
                 </ProtectedRoute>
               } />
               

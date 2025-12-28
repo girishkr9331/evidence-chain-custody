@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { Upload, Hash, FileText, AlertCircle, UserPlus } from "lucide-react";
 import Layout from "../components/Layout";
 import { useWeb3 } from "../context/Web3Context";
+import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 import CryptoJS from "crypto-js";
 import axios from "../config/api";
@@ -21,9 +22,10 @@ const EvidenceUpload = () => {
   const [hashingFile, setHashingFile] = useState(false);
   const [isUserRegistered, setIsUserRegistered] = useState(false);
   const [checkingUser, setCheckingUser] = useState(true);
-  const [userRole, setUserRole] = useState<number>(0);
+  const [userRole, setUserRole] = useState<string>('NONE');
   const [canUpload, setCanUpload] = useState(false);
   const { contract, isConnected, account } = useWeb3();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const categories = [
@@ -37,10 +39,10 @@ const EvidenceUpload = () => {
 
   useEffect(() => {
     checkUserRegistration();
-  }, [contract, isConnected, account]);
+  }, [contract, isConnected, account, user]);
 
   const checkUserRegistration = async () => {
-    if (!contract || !isConnected || !account) {
+    if (!isConnected || !account) {
       setCheckingUser(false);
       setIsUserRegistered(false);
       setCanUpload(false);
@@ -48,36 +50,39 @@ const EvidenceUpload = () => {
     }
 
     try {
-      const user = await contract.getUser(account);
-      const isRegistered = user.isActive;
-      const role = Number(user.role);
+      // Check if user is logged in and authenticated in the database
+      const isAuthenticated = !!user;
+      const dbRole = user?.role || 'NONE';
 
-      // Check if user is admin (contract owner)
+      // Check if user is admin (contract owner) - optional blockchain check
       let isContractAdmin = false;
-      try {
-        const contractAdmin = await contract.admin();
-        isContractAdmin = account.toLowerCase() === contractAdmin.toLowerCase();
-      } catch (error) {
-        console.error("Error checking admin status:", error);
+      if (contract) {
+        try {
+          const contractAdmin = await contract.admin();
+          isContractAdmin = account.toLowerCase() === contractAdmin.toLowerCase();
+        } catch (error) {
+          console.error("Error checking admin status:", error);
+        }
       }
 
-      // Role 1 = POLICE, Role 3 = FORENSIC_LAB
-      // Admin can always upload
-      const hasUploadPermission = isContractAdmin || role === 1 || role === 3;
+      // Use database role for permissions (source of truth)
+      // Roles that can upload: ADMIN, POLICE, FORENSIC_LAB
+      const hasUploadPermission = isContractAdmin || 
+                                   dbRole === 'ADMIN' || 
+                                   dbRole === 'POLICE' || 
+                                   dbRole === 'FORENSIC_LAB';
 
       console.log("👤 User registration and permission check:", {
         address: account,
-        isActive: user.isActive,
-        role: role,
-        roleName: getRoleName(role),
-        name: user.name,
-        isAdmin: isContractAdmin,
+        isAuthenticated: isAuthenticated,
+        dbRole: dbRole,
+        isContractAdmin: isContractAdmin,
         canUpload: hasUploadPermission
       });
 
-      setIsUserRegistered(isRegistered);
-      setUserRole(role);
-      setCanUpload(isRegistered && hasUploadPermission);
+      setIsUserRegistered(isAuthenticated);
+      setUserRole(dbRole);
+      setCanUpload(isAuthenticated && hasUploadPermission);
     } catch (error) {
       console.error("Error checking user registration:", error);
       setIsUserRegistered(false);
@@ -85,11 +90,6 @@ const EvidenceUpload = () => {
     } finally {
       setCheckingUser(false);
     }
-  };
-
-  const getRoleName = (role: number) => {
-    const roleNames = ['NONE', 'POLICE', 'INVESTIGATOR', 'FORENSIC_LAB', 'COURT', 'CYBER_UNIT'];
-    return roleNames[role] || 'UNKNOWN';
   };
 
   const handleChange = (
@@ -305,18 +305,18 @@ const EvidenceUpload = () => {
                   Insufficient Permissions
                 </h3>
                 <p className="text-orange-800 dark:text-orange-300 text-sm mb-2">
-                  Your account ({account?.slice(0, 8)}...{account?.slice(-6)}) is registered with role: <strong>{getRoleName(userRole)}</strong>
+                  Your account ({account?.slice(0, 8)}...{account?.slice(-6)}) is registered with role: <strong>{userRole}</strong>
                 </p>
                 <p className="text-orange-800 dark:text-orange-300 text-sm mb-3">
                   Only users with the following roles can upload evidence:
                 </p>
                 <ul className="text-orange-800 dark:text-orange-300 text-sm list-disc list-inside mb-3">
-                  <li>Administrator (Contract Owner)</li>
-                  <li>Police Officer</li>
-                  <li>Forensic Lab Personnel</li>
+                  <li>Administrator (ADMIN)</li>
+                  <li>Police Officer (POLICE)</li>
+                  <li>Forensic Lab Personnel (FORENSIC_LAB)</li>
                 </ul>
                 <p className="text-orange-800 dark:text-orange-300 text-sm">
-                  Please contact an administrator if you need upload permissions.
+                  Please contact an administrator to update your role if you need upload permissions.
                 </p>
               </div>
             </div>
@@ -423,15 +423,15 @@ const EvidenceUpload = () => {
               </div>
 
               {file && (
-                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <FileText className="w-5 h-5 text-gray-600" />
+                      <FileText className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                       <div>
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
                           {file.name}
                         </p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
                           {(file.size / 1024 / 1024).toFixed(2)} MB
                         </p>
                       </div>
@@ -447,16 +447,16 @@ const EvidenceUpload = () => {
             {/* File Hash Display */}
             {fileHash && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
                   <Hash className="w-4 h-4" />
                   SHA-256 Hash
                 </label>
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  <p className="text-xs font-mono text-gray-700 break-all">
+                <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                  <p className="text-xs font-mono text-gray-700 dark:text-gray-300 break-all">
                     {fileHash}
                   </p>
                 </div>
-                <p className="mt-1 text-xs text-green-600">
+                <p className="mt-1 text-xs text-green-600 dark:text-green-400">
                   ✓ This hash will be stored on the blockchain for integrity
                   verification
                 </p>
@@ -465,7 +465,7 @@ const EvidenceUpload = () => {
 
             {/* Notes */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Additional Notes
               </label>
               <textarea
@@ -474,7 +474,7 @@ const EvidenceUpload = () => {
                 onChange={handleChange}
                 placeholder="Any additional information..."
                 rows={3}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
 
@@ -503,11 +503,11 @@ const EvidenceUpload = () => {
         </div>
 
         {/* Info Box */}
-        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-blue-900 mb-2">
+        <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">
             How it works:
           </h3>
-          <ul className="text-sm text-blue-800 space-y-1">
+          <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
             <li>• File hash is calculated locally using SHA-256 algorithm</li>
             <li>• Evidence metadata and hash are recorded on blockchain</li>
             <li>• Original file can be stored in secure off-chain storage</li>

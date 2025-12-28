@@ -18,6 +18,7 @@ interface AuthContextType {
   logout: () => void
   isAuthenticated: boolean
   loading: boolean
+  isAdmin: () => boolean
 }
 
 interface RegisterData {
@@ -36,6 +37,7 @@ const AuthContext = createContext<AuthContextType>({
   logout: () => {},
   isAuthenticated: false,
   loading: true,
+  isAdmin: () => false,
 })
 
 export const useAuth = () => useContext(AuthContext)
@@ -101,6 +103,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     toast.success('Logged out successfully')
   }
 
+  const isAdmin = () => {
+    return user?.role === 'ADMIN'
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -111,6 +117,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         logout,
         isAuthenticated: !!user,
         loading,
+        isAdmin,
       }}
     >
       {children}

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Users, UserPlus, UserCheck, UserX, Shield, Filter, Search, Wallet, Edit2 } from 'lucide-react'
+import { Users, UserPlus, UserCheck, UserX, Shield, Filter, Search, Wallet, Edit2, Copy, Check } from 'lucide-react'
 import Layout from '../components/Layout'
 import { useWeb3 } from '../context/Web3Context'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import UserStatsCard from '../components/UserStatsCard'
 import ConfirmDialog from '../components/ConfirmDialog'
+import UserAvatar from '../components/UserAvatar'
 import api from '../config/api'
 
 interface User {
@@ -36,8 +37,9 @@ const UserManagement = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [editRole, setEditRole] = useState('')
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null)
   const { contract, isConnected, account } = useWeb3()
-  const { token } = useAuth()
+  const { user, isAdmin } = useAuth()
 
   const roles = [
     { value: '1', label: 'Police' },
@@ -48,11 +50,9 @@ const UserManagement = () => {
   ]
 
   useEffect(() => {
-    if (token) {
-      loadUsers()
-    }
+    loadUsers()
     checkIfAdmin()
-  }, [contract, isConnected, account, token])
+  }, [contract, isConnected, account, user])
 
   useEffect(() => {
     filterUsers()
@@ -125,16 +125,24 @@ const UserManagement = () => {
     }
   }
 
+  const copyAddressToClipboard = async (address: string) => {
+    try {
+      await navigator.clipboard.writeText(address)
+      setCopiedAddress(address)
+      toast.success('Address copied to clipboard!')
+      setTimeout(() => setCopiedAddress(null), 2000)
+    } catch (error) {
+      console.error('Failed to copy:', error)
+      toast.error('Failed to copy address')
+    }
+  }
+
   const loadUsers = async () => {
     setLoading(true)
     
     try {
       // Load users from database
-      const response = await api.get('/api/users', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
+      const response = await api.get('/api/users')
       
       const dbUsers = response.data
       console.log('📊 Loaded users from database:', dbUsers.length)
@@ -165,13 +173,11 @@ const UserManagement = () => {
           try {
             const blockchainUser = await contract.getUser(user.address)
             user.onBlockchain = blockchainUser.isActive
-            // Only update status and timestamp from blockchain, keep database role
-            // (blockchain role cannot be updated, so we use database role as source of truth)
-            user.isActive = blockchainUser.isActive
+            // Keep database status as source of truth, only store timestamp from blockchain
             user.registeredAt = Number(blockchainUser.registeredAt)
             // Store blockchain role separately for reference
             const blockchainRole = Number(blockchainUser.role)
-            console.log(`📊 User ${user.name}: DB role=${user.role}, Blockchain role=${blockchainRole}`)
+            console.log(`📊 User ${user.name}: DB role=${user.role}, Blockchain role=${blockchainRole}, DB active=${user.isActive}`)
           } catch (error) {
             // User not on blockchain yet
             user.onBlockchain = false
@@ -262,10 +268,6 @@ const UserManagement = () => {
           name: newUser.name,
           role: newUser.role,
           department: newUser.department
-        }, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
         })
         
         console.log('✅ Database registration successful:', response.data)
@@ -275,11 +277,7 @@ const UserManagement = () => {
         
         // Verify user was saved by fetching from database
         try {
-          const verifyResponse = await api.get(`/api/users/${newUser.address}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          })
+          const verifyResponse = await api.get(`/api/users/${newUser.address}`)
           console.log('✅ User verified in database:', verifyResponse.data)
         } catch (verifyError) {
           console.warn('⚠️ Could not verify user in database:', verifyError)
@@ -329,48 +327,27 @@ const UserManagement = () => {
     }
   }
 
-  const handleToggleUser = async (address: string, isActive: boolean) => {
-    if (!contract) return
 
+  const handleToggleUser = async (address: string, isActive: boolean) => {
     let toastId: string | undefined
 
     try {
-      toastId = toast.loading('Updating user status on blockchain...')
+      toastId = toast.loading(`${isActive ? 'Deactivating' : 'Activating'} user...`)
       
-      // Step 1: Update on blockchain
-      const tx = isActive 
-        ? await contract.deactivateUser(address)
-        : await contract.activateUser(address)
+      await api.patch(`/api/users/${address}/status`, {
+        isActive: !isActive
+      })
       
-      await tx.wait()
-      
-      // Step 2: Update in database
       toast.dismiss(toastId)
-      toastId = toast.loading('Syncing status to database...')
-      
-      try {
-        await api.patch(`/api/users/${address}/status`, {
-          isActive: !isActive
-        }, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        })
-        
-        toast.dismiss(toastId)
-        toast.success(`User ${isActive ? 'deactivated' : 'activated'} successfully!`)
-      } catch (dbError) {
-        console.error('Database status update error:', dbError)
-        toast.dismiss(toastId)
-        toast.error(`User ${isActive ? 'deactivated' : 'activated'} on blockchain, but database sync failed`)
-      }
+      toast.success(`User ${isActive ? 'deactivated' : 'activated'} successfully!`)
       
       loadUsers()
     } catch (error: any) {
       if (toastId) {
         toast.dismiss(toastId)
       }
-      toast.error(error.reason || 'Failed to update user')
+      console.error('Error updating user:', error)
+      toast.error(error.response?.data?.message || 'Failed to update user')
     }
   }
 
@@ -399,24 +376,10 @@ const UserManagement = () => {
       
       await api.patch(`/api/users/${editingUser.address}/role`, {
         role: roleMapping[editRole]
-      }, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
       })
       
       toast.dismiss(toastId)
-      
-      // Show appropriate message based on blockchain status
-      if (editingUser.onBlockchain) {
-        toast.success('Role updated in database!', { duration: 3000 })
-        toast('⚠️ Note: To update the blockchain role, deactivate and re-register this user.', { 
-          duration: 6000,
-          icon: '⚠️'
-        })
-      } else {
-        toast.success('Role updated successfully!')
-      }
+      toast.success('Role updated successfully!')
       
       setShowEditDialog(false)
       setEditingUser(null)
@@ -464,6 +427,32 @@ const UserManagement = () => {
       'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300'
     ]
     return colors[roleNum] || colors[0]
+  }
+
+  // Admin-only access check
+  if (!loading && !isAdmin()) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center max-w-md">
+            <div className="mx-auto w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-6">
+              <Shield className="w-10 h-10 text-red-600 dark:text-red-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+              Access Denied
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              User Management is restricted to administrators only. This page contains sensitive user information and system configuration.
+            </p>
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <p className="text-sm text-blue-800 dark:text-blue-300">
+                <strong>Need access?</strong> Contact your system administrator to request admin privileges.
+              </p>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    )
   }
 
   if (loading) {
@@ -516,39 +505,18 @@ const UserManagement = () => {
                   </select>
                 </div>
 
-                {editingUser.onBlockchain && (
-                  <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-3">
-                    <div className="flex items-start gap-2">
-                      <svg className="w-4 h-4 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                      </svg>
-                      <div>
-                        <p className="text-xs font-semibold text-orange-900 dark:text-orange-300 mb-1">
-                          Blockchain User - Limited Update
-                        </p>
-                        <p className="text-xs text-orange-800 dark:text-orange-300">
-                          The smart contract doesn't support role updates. The database role will be updated, but the blockchain role remains unchanged. 
-                          To fully update, deactivate this user and re-register with the new role.
-                        </p>
-                      </div>
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <svg className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <div>
+                      <p className="text-xs text-blue-800 dark:text-blue-300">
+                        The database role will be updated immediately. This role is used for all system permissions including evidence upload.
+                      </p>
                     </div>
                   </div>
-                )}
-
-                {!editingUser.onBlockchain && (
-                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-                    <div className="flex items-start gap-2">
-                      <svg className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                      <div>
-                        <p className="text-xs text-green-800 dark:text-green-300">
-                          This user is only in the database. The role will be updated successfully.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
 
               <div className="flex gap-3 mt-6">
@@ -574,10 +542,10 @@ const UserManagement = () => {
       )}
 
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">User Management</h1>
-            <p className="text-gray-600 dark:text-gray-300 mt-1">Manage system users and permissions</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">User Management</h1>
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-1">Manage system users and permissions</p>
           </div>
           <div className="relative group">
             <button
@@ -634,27 +602,27 @@ const UserManagement = () => {
 
         {/* Filters */}
         {isConnected && users.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-3 md:p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
               {/* Search */}
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
+                <Search className="absolute left-2 md:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4 md:w-5 md:h-5" />
                 <input
                   type="text"
-                  placeholder="Search by name, address, department..."
+                  placeholder="Search by name, address..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full pl-8 md:pl-10 pr-3 md:pr-4 py-2 md:py-3 text-sm md:text-base border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
               </div>
 
               {/* Role Filter */}
               <div className="relative">
-                <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
+                <Shield className="absolute left-2 md:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4 md:w-5 md:h-5" />
                 <select
                   value={roleFilter}
                   onChange={(e) => setRoleFilter(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent appearance-none"
+                  className="w-full pl-8 md:pl-10 pr-3 md:pr-4 py-2 md:py-3 text-sm md:text-base border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent appearance-none"
                 >
                   <option value="ALL">All Roles</option>
                   <option value="0">Admin</option>
@@ -666,11 +634,11 @@ const UserManagement = () => {
 
               {/* Status Filter */}
               <div className="relative">
-                <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
+                <Filter className="absolute left-2 md:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4 md:w-5 md:h-5" />
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent appearance-none"
+                  className="w-full pl-8 md:pl-10 pr-3 md:pr-4 py-2 md:py-3 text-sm md:text-base border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent appearance-none"
                 >
                   <option value="ALL">All Status</option>
                   <option value="ACTIVE">Active Only</option>
@@ -679,7 +647,7 @@ const UserManagement = () => {
               </div>
             </div>
 
-            <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+            <div className="mt-3 md:mt-4 text-xs md:text-sm text-gray-600 dark:text-gray-400">
               Showing <span className="font-medium">{filteredUsers.length}</span> of{' '}
               <span className="font-medium">{users.length}</span> users
             </div>
@@ -792,89 +760,216 @@ const UserManagement = () => {
             </p>
           </div>
         ) : (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Address</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Role</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Department</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Source</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {filteredUsers.map((user) => (
-                    <tr key={user.address} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">{user.name}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400 font-mono">
-                        {user.address.slice(0, 10)}...{user.address.slice(-8)}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${getRoleColor(user.role)}`}>
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-max">
+                  <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">User</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Address</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Role</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Department</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Source</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {filteredUsers.map((user) => (
+                      <tr key={user.address} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td className="px-6 py-4">
+                          <UserAvatar 
+                            userAddress={user.address}
+                            userName={user.name}
+                            size="sm"
+                            showName={true}
+                          />
+                        </td>
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => copyAddressToClipboard(user.address)}
+                            className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 font-mono hover:text-primary-600 dark:hover:text-primary-400 transition-colors group"
+                            title="Click to copy full address"
+                          >
+                            <span>{user.address.slice(0, 10)}...{user.address.slice(-8)}</span>
+                            {copiedAddress === user.address ? (
+                              <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
+                            ) : (
+                              <Copy className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            )}
+                          </button>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-3 py-1 text-xs font-medium rounded-full ${getRoleColor(user.role)}`}>
+                            {getRoleName(user.role)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{user.department}</td>
+                        <td className="px-6 py-4">
+                          {user.isActive ? (
+                            <span className="flex items-center gap-1 text-green-600 dark:text-green-400 text-sm">
+                              <UserCheck className="w-4 h-4" /> Active
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-red-600 dark:text-red-400 text-sm">
+                              <UserX className="w-4 h-4" /> Inactive
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          {user.onBlockchain ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded text-xs font-medium">
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
+                              Blockchain
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded text-xs font-medium">
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                              </svg>
+                              DB Only
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            {isAdmin() && (
+                              <>
+                                <button
+                                  onClick={() => handleEditRole(user)}
+                                  className="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
+                                  title="Edit role"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleToggleUser(user.address, user.isActive)}
+                                  className={`text-sm font-medium ${
+                                    user.isActive ? 'text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300' : 'text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300'
+                                  }`}
+                                >
+                                  {user.isActive ? 'Deactivate' : 'Activate'}
+                                </button>
+                              </>
+                            )}
+                            {!isAdmin() && (
+                              <span className="text-sm text-gray-500 dark:text-gray-400 italic">
+                                Admin only
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-4">
+              {filteredUsers.map((user) => (
+                <div
+                  key={user.address}
+                  className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-start gap-3 flex-1">
+                      <UserAvatar 
+                        userAddress={user.address}
+                        userName={user.name}
+                        size="md"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">
+                          {user.name}
+                        </h3>
+                        <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${getRoleColor(user.role)}`}>
                           {getRoleName(user.role)}
                         </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{user.department}</td>
-                      <td className="px-6 py-4">
-                        {user.isActive ? (
-                          <span className="flex items-center gap-1 text-green-600 dark:text-green-400 text-sm">
-                            <UserCheck className="w-4 h-4" /> Active
-                          </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      {user.isActive ? (
+                        <span className="flex items-center gap-1 text-green-600 dark:text-green-400 text-xs">
+                          <UserCheck className="w-4 h-4" /> Active
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-red-600 dark:text-red-400 text-xs">
+                          <UserX className="w-4 h-4" /> Inactive
+                        </span>
+                      )}
+                      {user.onBlockchain ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded text-xs font-medium">
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                          Blockchain
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded text-xs font-medium">
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                          </svg>
+                          DB Only
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 mb-4">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Address:</span>
+                      <button
+                        onClick={() => copyAddressToClipboard(user.address)}
+                        className="flex items-center gap-2 text-xs text-gray-900 dark:text-white font-mono hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                        title="Click to copy full address"
+                      >
+                        <span className="break-all">{user.address}</span>
+                        {copiedAddress === user.address ? (
+                          <Check className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
                         ) : (
-                          <span className="flex items-center gap-1 text-red-600 dark:text-red-400 text-sm">
-                            <UserX className="w-4 h-4" /> Inactive
-                          </span>
+                          <Copy className="w-4 h-4 flex-shrink-0" />
                         )}
-                      </td>
-                      <td className="px-6 py-4">
-                        {user.onBlockchain ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded text-xs font-medium">
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                            Blockchain
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded text-xs font-medium">
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                            </svg>
-                            DB Only
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          {isCurrentUserAdmin && (
-                            <button
-                              onClick={() => handleEditRole(user)}
-                              className="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
-                              title="Edit role"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                              Edit
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleToggleUser(user.address, user.isActive)}
-                            className={`text-sm font-medium ${
-                              user.isActive ? 'text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300' : 'text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300'
-                            }`}
-                          >
-                            {user.isActive ? 'Deactivate' : 'Activate'}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </button>
+                    </div>
+
+                    <div>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Department:</span>
+                      <p className="text-sm text-gray-900 dark:text-white">{user.department}</p>
+                    </div>
+                  </div>
+
+                  {isAdmin() && (
+                    <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+                      <button
+                        onClick={() => handleEditRole(user)}
+                        className="flex-1 flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 bg-blue-50 dark:bg-blue-900/20 rounded-lg transition-colors"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        Edit Role
+                      </button>
+                      <button
+                        onClick={() => handleToggleUser(user.address, user.isActive)}
+                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                          user.isActive 
+                            ? 'text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 bg-red-50 dark:bg-red-900/20' 
+                            : 'text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 bg-green-50 dark:bg-green-900/20'
+                        }`}
+                      >
+                        {user.isActive ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-          </div>
+          </>
         )}
       </div>
     </Layout>

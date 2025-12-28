@@ -6,6 +6,7 @@ import { useWeb3 } from '../context/Web3Context'
 import toast from 'react-hot-toast'
 import axios from '../config/api'
 import EvidenceArchiveModal from '../components/EvidenceArchiveModal'
+import UserHoverCard from '../components/UserHoverCard'
 
 interface Evidence {
   evidenceId: string
@@ -15,6 +16,7 @@ interface Evidence {
   currentCustodian: string
   createdAt: number
   caseId: string
+  caseStatus?: string
 }
 
 const EvidenceList = () => {
@@ -58,7 +60,8 @@ const EvidenceList = () => {
         collector: evidence.uploadedBy,
         currentCustodian: evidence.uploadedBy,
         createdAt: new Date(evidence.createdAt).getTime() / 1000,
-        caseId: evidence.caseId
+        caseId: evidence.caseId,
+        caseStatus: evidence.caseStatus || 'OPEN'
       }))
 
       setEvidenceList(evidenceData)
@@ -224,27 +227,27 @@ const EvidenceList = () => {
         </div>
 
         {/* Filters */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-3 md:p-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
             {/* Search */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
+              <Search className="absolute left-2 md:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4 md:w-5 md:h-5" />
               <input
                 type="text"
-                placeholder="Search by Evidence ID, Case ID..."
+                placeholder="Search Evidence ID, Case ID..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full pl-8 md:pl-10 pr-3 md:pr-4 py-2 md:py-3 text-sm md:text-base border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
             </div>
 
             {/* Category Filter */}
             <div className="relative">
-              <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
+              <Filter className="absolute left-2 md:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4 md:w-5 md:h-5" />
               <select
                 value={filterCategory}
                 onChange={(e) => setFilterCategory(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent appearance-none"
+                className="w-full pl-8 md:pl-10 pr-3 md:pr-4 py-2 md:py-3 text-sm md:text-base border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent appearance-none"
               >
                 {categories.map((cat) => (
                   <option key={cat.value} value={cat.value}>
@@ -256,11 +259,11 @@ const EvidenceList = () => {
 
             {/* Status Filter */}
             <div className="relative">
-              <Archive className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-5 h-5" />
+              <Archive className="absolute left-2 md:left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4 md:w-5 md:h-5" />
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent appearance-none"
+                className="w-full pl-8 md:pl-10 pr-3 md:pr-4 py-2 md:py-3 text-sm md:text-base border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent appearance-none"
               >
                 <option value="ALL">All Status</option>
                 <option value="ACTIVE">Active</option>
@@ -271,7 +274,7 @@ const EvidenceList = () => {
             </div>
           </div>
 
-          <div className="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+          <div className="mt-3 md:mt-4 flex items-center justify-between text-xs md:text-sm text-gray-600 dark:text-gray-400">
             <p>
               Showing <span className="font-medium">{filteredList.length}</span> of{' '}
               <span className="font-medium">{evidenceList.length}</span> evidence records
@@ -285,43 +288,63 @@ const EvidenceList = () => {
             {filteredList.map((evidence) => (
               <div
                 key={evidence.evidenceId}
-                className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow"
+                className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 md:p-6 hover:shadow-md transition-shadow"
               >
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start justify-between mb-3 md:mb-4">
                   <div>
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                    <h3 className="text-base md:text-xl font-semibold text-gray-900 dark:text-white">
                       {evidence.evidenceId}
                     </h3>
-                    <p className="text-base text-gray-500 dark:text-gray-400 mt-1">
+                    <p className="text-sm md:text-base text-gray-500 dark:text-gray-400 mt-1">
                       Case: {evidence.caseId}
                     </p>
                   </div>
-                  <div className="flex gap-2">
-                    <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-sm font-medium rounded-full">
+                  <div className="flex flex-wrap gap-1.5 md:gap-2">
+                    <span className="px-2 md:px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs md:text-sm font-medium rounded-full">
                       {evidence.metadata.category || 'EVIDENCE'}
                     </span>
+                    {evidence.caseStatus === 'CLOSED' ? (
+                      <span className="px-2 md:px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs md:text-sm font-medium rounded-full flex items-center gap-1">
+                        <svg className="w-2.5 h-2.5 md:w-3 md:h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                        </svg>
+                        Closed
+                      </span>
+                    ) : (
+                      <span className="px-2 md:px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs md:text-sm font-medium rounded-full flex items-center gap-1">
+                        <svg className="w-2.5 h-2.5 md:w-3 md:h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 015.905-.75 1 1 0 001.937-.5A5.002 5.002 0 0010 2z" />
+                        </svg>
+                        Active
+                      </span>
+                    )}
                     {getStatusBadge(evidence.evidenceId)}
                   </div>
                 </div>
 
-                <p className="text-base text-gray-700 dark:text-gray-300 mb-4 line-clamp-2">
+                <p className="text-sm md:text-base text-gray-700 dark:text-gray-300 mb-3 md:mb-4 line-clamp-2">
                   {evidence.metadata.description || 'No description available'}
                 </p>
 
-                <div className="space-y-2 mb-4">
-                  <div className="flex items-center gap-2 text-base text-gray-600 dark:text-gray-400">
-                    <User className="w-5 h-5" />
-                    <span>Custodian: {evidence.currentCustodian.slice(0, 6)}...{evidence.currentCustodian.slice(-4)}</span>
+                <div className="space-y-1.5 md:space-y-2 mb-3 md:mb-4">
+                  <div className="flex items-center gap-2 text-sm md:text-base text-gray-600 dark:text-gray-400">
+                    <User className="w-4 h-4 md:w-5 md:h-5" />
+                    <span>Custodian: </span>
+                    <UserHoverCard userAddress={evidence.currentCustodian}>
+                      <span className="font-mono cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
+                        {evidence.currentCustodian.slice(0, 6)}...{evidence.currentCustodian.slice(-4)}
+                      </span>
+                    </UserHoverCard>
                   </div>
-                  <div className="flex items-center gap-2 text-base text-gray-600 dark:text-gray-400">
-                    <Calendar className="w-5 h-5" />
+                  <div className="flex items-center gap-2 text-sm md:text-base text-gray-600 dark:text-gray-400">
+                    <Calendar className="w-4 h-4 md:w-5 md:h-5" />
                     <span>
                       {new Date(evidence.createdAt * 1000).toLocaleDateString()}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-base text-gray-600 dark:text-gray-400">
-                    <FileText className="w-5 h-5" />
-                    <span className="font-mono text-sm truncate">
+                  <div className="flex items-center gap-2 text-sm md:text-base text-gray-600 dark:text-gray-400">
+                    <FileText className="w-4 h-4 md:w-5 md:h-5" />
+                    <span className="font-mono text-xs md:text-sm truncate">
                       Hash: {evidence.evidenceHash.slice(0, 16)}...
                     </span>
                   </div>
@@ -330,29 +353,29 @@ const EvidenceList = () => {
                 <div className="flex gap-2">
                   <Link
                     to={`/evidence/${evidence.evidenceId}`}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-primary-600 text-white text-base font-medium rounded-lg hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 transition-colors"
+                    className="flex-1 flex items-center justify-center gap-1.5 md:gap-2 py-2 md:py-2.5 px-3 md:px-4 bg-primary-600 text-white text-sm md:text-base font-medium rounded-lg hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 transition-colors"
                   >
-                    <Eye className="w-5 h-5" />
+                    <Eye className="w-4 h-4 md:w-5 md:h-5" />
                     View Details
                   </Link>
                   <button
                     onClick={() => handleArchiveClick(evidence.evidenceId)}
-                    className="flex items-center justify-center gap-2 py-2.5 px-4 bg-orange-600 text-white text-base font-medium rounded-lg hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 transition-colors"
+                    className="flex items-center justify-center gap-1.5 md:gap-2 py-2 md:py-2.5 px-3 md:px-4 bg-orange-600 text-white text-sm md:text-base font-medium rounded-lg hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600 transition-colors"
                     title="Manage Status"
                   >
-                    <Archive className="w-5 h-5" />
+                    <Archive className="w-4 h-4 md:w-5 md:h-5" />
                   </button>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-            <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
+            <FileText className="w-16 h-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
               No evidence found
             </h3>
-            <p className="text-gray-600 mb-6">
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
               {searchTerm || filterCategory !== 'ALL'
                 ? 'Try adjusting your filters'
                 : 'Get started by uploading your first evidence'}
